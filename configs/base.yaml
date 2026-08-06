@@ -1,0 +1,107 @@
+# Default experiment configuration. Override single keys on the command line:
+#   python scripts/run_backtest.py --config configs/base.yaml --set alloc.cardinality=5
+
+paths:
+  raw: data/raw
+  panel: data/panel
+  runs: runs
+  artifacts: artifacts
+
+data:
+  source: coinmetrics                # community API, no key required
+  metrics: [PriceUSD, CapMrktEstUSD]
+  start: "2016-01-01"
+  end: "2026-06-30"
+  # Assets whose price is pegged or mechanically tied to another asset. The
+  # explicit list catches the well-known ones; peg_detection catches the rest.
+  exclude:
+    - usdt
+    - usdc
+    - dai
+    - busd
+    - tusd
+    - usdp
+    - gusd
+    - frax
+    - lusd
+    - usde
+    - pyusd
+    - fdusd
+    - usds
+    - usdd
+    - wbtc
+    - weth
+    - steth
+    - wsteth
+    - cbeth
+    - reth
+    - wbeth
+    - sfrxeth
+  peg_detection:
+    window: 180                      # days
+    max_cv: 0.02                     # coefficient of variation below this => peg
+
+universe:
+  size: 15
+  # An asset enters the universe at a rebalancing date only if it has at least
+  # this much continuous history up to that date. Prevents brand-new listings
+  # from being ranked in on a market-cap spike.
+  min_history_days: 540
+  # Market cap is ranked on the median over the trailing window rather than the
+  # spot value, which is noisy and easy to manipulate on small caps.
+  rank_window: 30
+
+backtest:
+  first_rebalance: "2019-01-01"
+  last_rebalance: "2026-05-31"
+  rebalance: "MS"                    # pandas offset alias: month start
+  horizon_days: 30                   # holding period == forecast horizon
+  train_days: 730                    # trailing window handed to the forecaster
+  valid_days: 180                    # inner split for forecaster model selection
+  cost_bps: 20.0                     # one-way, applied to turnover
+  cash_rate: annual_3m_tbill         # or a float, e.g. 0.02
+  annualisation: 365                 # cryptoassets trade every day
+
+scenarios:
+  n_paths: 1000
+  coupling: gaussian_copula          # gaussian_copula | independent | historical_ranks
+  coupling_window: 365               # days of residuals used for the rank correlation
+  seed: 20260805
+
+alloc:
+  w_max: 0.20
+  w_min: 0.02                        # a position is either zero or at least this
+  cardinality: 8                     # max number of non-zero positions (K)
+  turnover_cap: null                 # null => no hard cap, costs handle it
+  cvar_alpha: 0.95
+  gamma: 0.5                         # 0 => pure mean, 1 => pure -CVaR
+
+ea:
+  pop_size: 200
+  generations: 300
+  # Stop early when the incumbent has not improved by more than tol for
+  # `patience` generations. Saves roughly half the budget in practice.
+  patience: 40
+  tol: 1.0e-6
+  n_seeds: 5                         # 30 for the headline configuration
+  ga:
+    crossover: uniform
+    p_crossover: 0.9
+    p_mutation: 0.15
+    sigma: 0.10
+    tournament_size: 3
+    elite: 4
+  de:
+    F: 0.6
+    CR: 0.9
+  pso:
+    omega: 0.72
+    c1: 1.5
+    c2: 1.5
+  cmaes:
+    sigma0: 0.25
+
+statistics:
+  bootstrap_reps: 5000
+  block_length: 21                   # stationary bootstrap mean block length
+  confidence: 0.95
