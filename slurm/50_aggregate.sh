@@ -16,6 +16,7 @@ source "$(dirname "$0")/env.sh"
 
 python scripts/aggregate.py --config configs/base.yaml
 python scripts/make_figures.py --config configs/base.yaml
+python scripts/export_instances.py --config configs/base.yaml --forecaster garch --every 3
 
 echo
 echo "artifacts:"

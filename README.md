@@ -186,6 +186,14 @@ rate: `DTB3` from FRED.
 Stablecoins and wrapped tokens are dropped by name, with a rolling
 coefficient-of-variation test as a backstop for pegs the list misses.
 
+## Instance library
+
+`scripts/export_instances.py` dumps the allocation problems as an npz plus a JSON
+header — scenario matrix, previous weights, constraint parameters, and the best
+objective we know of with a flag for whether a solver proved it. No dependency on
+this package. Anyone benchmarking a different solver should not have to run a
+Prophet sweep first.
+
 ## Notes
 
 - [`notes/universe.md`](notes/universe.md) — why the universe is rebuilt at every
