@@ -1,0 +1,30 @@
+name: scenport
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # Conda builds of these are much less painful than the wheels, especially
+  # prophet, which otherwise wants to compile cmdstan on the login node.
+  - numpy>=1.26
+  - pandas>=2.1
+  - scipy>=1.11
+  - pyarrow>=15
+  - matplotlib>=3.8
+  - scikit-learn>=1.4
+  - statsmodels>=0.14.1
+  - lightgbm>=4.3
+  - prophet>=1.1.5
+  - cvxpy>=1.4
+  - pyyaml
+  - requests
+  - tqdm
+  - pytest
+  - pip:
+      - arch>=6.3
+      - cma>=3.3
+      - highspy>=1.7
+      - ruff>=0.4
+      # torch is installed separately so the CUDA build matches the cluster
+      # driver. On the Atos nodes:
+      #   pip install torch --index-url https://download.pytorch.org/whl/cu121

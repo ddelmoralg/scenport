@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Raw downloads. Regenerate with `make data`; data/panel is tracked instead, so the
+# compute nodes never need network access.
+data/raw/
+data/cache/
+
+# Big intermediates. Scenario sets alone run to a couple of gigabytes, and the
+# per-run backtest tree is thousands of small files. Both stay on the cluster;
+# what comes back is artifacts/.
+runs/scenarios/
+runs/backtests/
+runs/scores/
+
+logs/
+*.out
+*.err
+
+.DS_Store
+Thumbs.db

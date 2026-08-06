@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scenport"
+version = "0.4.0"
+description = "Scenario-based portfolio construction for cryptoassets"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Diego del Moral González" },
+    { name = "Ricardo S. Alonso" },
+]
+dependencies = [
+    "numpy>=1.26,<3",
+    "pandas>=2.1",
+    "scipy>=1.11",
+    "pyarrow>=15",
+    "pyyaml>=6",
+    "requests>=2.31",
+    "statsmodels>=0.14.1",
+    "prophet>=1.1.5",
+    "lightgbm>=4.3",
+    "scikit-learn>=1.4",
+    "cvxpy>=1.4",
+    "highspy>=1.7",
+    "cma>=3.3",
+    "arch>=6.3",
+    "matplotlib>=3.8",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+# Kept separate so the CPU-only jobs don't have to drag torch in.
+deep = [
+    "torch>=2.2",
+]
+# Only needed to reproduce the original TFM pipeline (scripts/legacy_tfm.py).
+legacy = [
+    "pygad>=3.2",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+scenport = "scenport.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scenport*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E741"]  # we use `l` for lambda-ish loop indices in the EA code
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: needs a mixed-integer solver or a long fit; deselect with -m 'not slow'",
+]
+filterwarnings = [
+    "ignore::FutureWarning:prophet.*",
+    "ignore::DeprecationWarning:pkg_resources.*",
+]
