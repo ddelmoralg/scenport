@@ -111,22 +111,22 @@ run to a couple of gigabytes, and the per-run backtest tree.
 
 ### Letting the cluster push
 
-A deploy key with write access is the least painful option.
+The cluster needs a deploy key with write access. Set it up from here, once:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/scenport_deploy -N ""
-cat ~/.ssh/scenport_deploy.pub     # paste into Settings > Deploy keys, tick "Allow write access"
-
-cat >> ~/.ssh/config <<'EOF'
-Host github-scenport
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/scenport_deploy
-    IdentitiesOnly yes
-EOF
-
-git remote set-url origin git@github-scenport:<user>/scenport.git
+bash scripts/setup_cluster_from_laptop.sh user@your-login-node
 ```
+
+It copies `scripts/bootstrap_cluster.sh` over, runs it so the private key is born
+on the cluster and stays there, registers the public half through the GitHub API,
+and clones. Nothing to paste, and the only credential that reaches the cluster is a
+key scoped to this one repository.
+
+If you would rather do it by hand, run `bash scripts/bootstrap_cluster.sh` on the
+login node. It prints the public key and stops; add it under Settings > Deploy keys
+with write access ticked, then run it again.
+
+Both scripts are safe to rerun.
 
 If the compute nodes are firewalled off from github.com, drop `60_publish.sh` from
 `submit_all.sh` and run `bash scripts/publish.sh` on the login node once the
