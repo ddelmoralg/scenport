@@ -544,6 +544,112 @@ def displacement_by_date(runs: Path, allocator: str = "ga", tol: float = 1e-6) -
     )
 
 
+def _seed_mean_weights(runs: Path, allocator: str) -> dict:
+    """One weight history per generator, averaged over its seeds."""
+    stored = _load_weight_runs(runs, allocator)
+    grouped: dict[str, list] = {}
+    for (forecaster, _), frame in stored.items():
+        grouped.setdefault(forecaster, []).append(frame)
+
+    averaged = {}
+    for forecaster, frames in grouped.items():
+        assets = frames[0].columns
+        for f in frames[1:]:
+            assets = assets.union(f.columns)
+        aligned = [f.reindex(columns=assets).fillna(0.0) for f in frames]
+        averaged[forecaster] = sum(aligned) / len(aligned)
+    return averaged
+
+
+def table_objective_difference(
+    runs: Path, panel_dir: Path, cfg, allocator: str = "ga", every: int = 1
+) -> pd.DataFrame:
+    """What each generator's portfolio is worth under a common reference set.
+
+    The third displacement quantity. L1 and support overlap say how far apart two
+    decisions are; this says how much that distance is worth, in the units of the
+    objective the allocator was optimising.
+
+    The reference set is a stationary block bootstrap of realised returns over the
+    window ending the day before the date, so it uses nothing the decision maker did
+    not have. That is what keeps this separate from realised performance: no outcome
+    data enters at any point. See ``scenport.forecast.reference`` for why it is built
+    the way it is.
+    """
+    from scenport.alloc.objective import Problem, score
+    from scenport.data.panel import Panel
+    from scenport.forecast import reference as ref
+
+    weights = _seed_mean_weights(runs, allocator)
+    if len(weights) < 2:
+        return pd.DataFrame()
+
+    try:
+        panel = Panel.read(panel_dir)
+    except FileNotFoundError:
+        log.warning("no price panel beside the runs; skipping the objective difference")
+        return pd.DataFrame()
+
+    returns = panel.returns()
+    horizon = int(cfg.get("backtest.horizon_days", 30))
+    common = sorted(set.intersection(*(set(w.index) for w in weights.values())))[::every]
+
+    rows = []
+    for date in common:
+        assets = sorted({a for w in weights.values() for a in w.columns})
+        scenarios = ref.reference_scenarios(
+            returns,
+            date,
+            assets,
+            horizon,
+            window_days=int(cfg.get("backtest.train_days", 730)),
+            seed=ref.reference_seed(date),
+        )
+        if scenarios.shape[0] == 0:
+            continue
+
+        problem = Problem(
+            scenarios=scenarios,
+            assets=assets,
+            w_max=float(cfg.get("alloc.w_max", 0.20)),
+            w_min=float(cfg.get("alloc.w_min", 0.02)),
+            cardinality=cfg.get("alloc.cardinality", 8),
+            cvar_alpha=float(cfg.get("alloc.cvar_alpha", 0.95)),
+            gamma=float(cfg.get("alloc.gamma", 0.5)),
+            # Turnover is a property of the path the portfolio took, not of the
+            # reference distribution, so it is left out here. Including it would
+            # make the yardstick depend on which generator ran last.
+            cost_rate=0.0,
+            objective=cfg.get("alloc.objective", "mean_cvar"),
+        )
+
+        for forecaster, history in weights.items():
+            if date not in history.index:
+                continue
+            w = history.loc[date].reindex(assets).fillna(0.0).to_numpy(float)
+            total = w.sum()
+            if total <= 0:
+                continue
+            rows.append(
+                {
+                    "rebalance": date,
+                    "forecaster": forecaster,
+                    "reference_objective": float(score(w / total, problem)[0]),
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame()
+
+    frame = pd.DataFrame(rows)
+    # Centred inside the date, because the level of the objective on any given date
+    # is a property of that month and not of the generator.
+    frame["objective_gap"] = frame["reference_objective"] - frame.groupby("rebalance")[
+        "reference_objective"
+    ].transform("mean")
+    return frame
+
+
 def table_tests(daily: pd.DataFrame, summaries: pd.DataFrame, cfg) -> pd.DataFrame:
     """Sharpe comparisons against the two benchmarks, plus deflation and PBO."""
     benchmarks = [c for c in daily.columns if c.split("|")[1] in ("equal", "mcap")]
@@ -728,6 +834,21 @@ def main() -> int:
             by_date = displacement_by_date(runs, args.reference_allocator)
             if not by_date.empty:
                 by_date.to_parquet(artifacts / "displacement_panel.parquet", index=False)
+
+            gaps = table_objective_difference(
+                runs, cfg.resolve("paths.panel", root), cfg, args.reference_allocator
+            )
+            if not gaps.empty:
+                gaps.to_parquet(artifacts / "objective_gap_panel.parquet", index=False)
+                summary = (
+                    gaps.groupby("forecaster", as_index=False)["objective_gap"]
+                    .agg(["mean", "std", "count"])
+                    .reset_index()
+                )
+                write(summary, artifacts, "objective_gap",
+                      "Objective value of each generator's portfolio under a common "
+                      "reference set built only from data available at the date, "
+                      "centred within each date.")
 
     if {"tests", "regimes"} & set(args.only):
         daily = load_daily(runs)
