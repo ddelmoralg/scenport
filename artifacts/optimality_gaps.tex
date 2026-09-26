@@ -1,0 +1,19 @@
+\begin{table}
+\caption{Distance to the mixed-integer optimum on identical instances.}
+\label{tab:optimality_gaps}
+\begin{tabular}{lrrrrr}
+\toprule
+allocator & mean\_gap & median\_gap & worst\_gap & mean\_seconds & n \\
+\midrule
+cvar\_lp & -0.282 & -0.070 & -0.000 & 0.021 & 29 \\
+milp & 0.000 & 0.000 & 0.000 & 0.440 & 29 \\
+cmaes & 0.006 & 0.000 & 0.562 & 2.172 & 290 \\
+ga & 0.007 & 0.000 & 0.539 & 3.035 & 290 \\
+de & 0.009 & 0.000 & 0.633 & 5.115 & 290 \\
+pso & 0.072 & 0.000 & 11.452 & 2.498 & 290 \\
+hrp & 4.878 & 1.501 & 77.098 & 0.003 & 29 \\
+equal & 4.929 & 1.169 & 88.191 & 0.000 & 29 \\
+minvar & 4.988 & 1.410 & 88.191 & 0.011 & 29 \\
+\bottomrule
+\end{tabular}
+\end{table}
