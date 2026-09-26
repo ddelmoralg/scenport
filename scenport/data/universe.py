@@ -41,7 +41,9 @@ class Universe:
         """Fraction of the universe replaced at each rebalancing date."""
         dates = self.dates
         out = {}
-        for prev, curr in zip(dates, dates[1:], strict=True):
+        # zip(dates, dates[1:], strict=True) raises for every input, because the
+        # second argument is always one shorter. Pair the two slices instead.
+        for prev, curr in zip(dates[:-1], dates[1:], strict=True):
             before, after = set(self.members[prev]), set(self.members[curr])
             out[curr] = 1.0 - len(before & after) / max(len(after), 1)
         return pd.Series(out, name="universe_turnover")
@@ -68,12 +70,19 @@ def build(
     size: int = 15,
     min_history_days: int = 540,
     rank_window: int = 30,
+    min_size: int | None = None,
 ) -> Universe:
-    """Select the ``size`` largest eligible assets at each date in ``dates``."""
+    """Select the ``size`` largest eligible assets at each date in ``dates``.
+
+    Dates with fewer than ``min_size`` eligible assets are dropped rather than
+    returned short. The default is half the requested size.
+    """
+    min_size = max(1, size // 2) if min_size is None else min_size
     history = continuous_history(panel.price)
     mcap_rank = panel.mcap.rolling(rank_window, min_periods=max(rank_window // 2, 1)).median()
 
     members: dict[pd.Timestamp, list[str]] = {}
+    skipped: list[pd.Timestamp] = []
     for date in dates:
         if date not in panel.price.index:
             raise KeyError(f"{date.date()} is not in the panel calendar")
@@ -82,6 +91,13 @@ def build(
         priced = panel.price.loc[date].notna()
         caps = mcap_rank.loc[date]
         eligible = caps[long_enough & priced].dropna()
+
+        # A date with no market capitalisation anywhere cannot rank anything, so it
+        # yields an empty universe rather than a short one. Carrying that forward
+        # hands the backtest a date with no assets, so drop it and say so.
+        if len(eligible) < min_size:
+            skipped.append(date)
+            continue
 
         if len(eligible) < size:
             log.warning(
@@ -92,7 +108,32 @@ def build(
             )
         members[date] = eligible.sort_values(ascending=False).head(size).index.tolist()
 
+    if skipped:
+        log.warning(
+            "dropped %d rebalancing dates with fewer than %d eligible assets, %s to %s. "
+            "Market capitalisation coverage starts later than price coverage here; "
+            "check backtest.first_rebalance against %s.",
+            len(skipped),
+            min_size,
+            skipped[0].date(),
+            skipped[-1].date(),
+            first_covered(panel.mcap),
+        )
+    if not members:
+        raise ValueError(
+            "no rebalancing date had enough eligible assets. Price covers "
+            f"{panel.dates[0].date()} to {panel.dates[-1].date()}, market "
+            f"capitalisation starts {first_covered(panel.mcap)}."
+        )
+
     return Universe(members=members)
+
+
+def first_covered(frame: pd.DataFrame) -> str:
+    """First date on which any column has a value. Used in the coverage messages."""
+    covered = frame.notna().any(axis=1)
+    hits = covered[covered]
+    return str(hits.index[0].date()) if len(hits) else "never"
 
 
 def read(path) -> Universe:

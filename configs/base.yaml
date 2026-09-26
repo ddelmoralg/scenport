@@ -11,7 +11,7 @@ data:
   source: coinmetrics                # community API, no key required
   metrics: [PriceUSD, CapMrktEstUSD]
   start: "2016-01-01"
-  end: "2026-06-30"
+  end: "2026-09-20"
   # Assets whose price is pegged or mechanically tied to another asset. The
   # explicit list catches the well-known ones; peg_detection catches the rest.
   exclude:
@@ -28,6 +28,15 @@ data:
     - pyusd
     - fdusd
     - usds
+    # Commodity-backed tokens. These are claims on metal, not cryptoassets, and
+    # the peg test does not catch them because gold in dollars moves enough to
+    # look like a real price series. Tether Gold ran at 21% annualised
+    # volatility over 2024-2026 against 47% for bitcoin, so leaving it in would
+    # buy the portfolio diversification that has nothing to do with the method.
+    - xaut
+    - paxg
+    - kau
+    - dgx
     - usdd
     - wbtc
     - weth
@@ -52,8 +61,13 @@ universe:
   rank_window: 30
 
 backtest:
-  first_rebalance: "2019-01-01"
-  last_rebalance: "2026-05-31"
+  # Market capitalisation on the Coin Metrics community tier starts 2019-06-22,
+  # months after price does. Ranking by capitalisation is impossible before that,
+  # so the backtest starts once the rolling window has filled.
+  first_rebalance: "2019-08-01"
+  # One horizon of prices has to exist after the last rebalance, so this stays
+  # well inside data.end rather than up against it.
+  last_rebalance: "2026-08-01"
   rebalance: "MS"                    # pandas offset alias: month start
   horizon_days: 30                   # holding period == forecast horizon
   train_days: 730                    # trailing window handed to the forecaster

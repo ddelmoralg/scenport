@@ -32,7 +32,10 @@ class Panel:
     def returns(self, log_returns: bool = False) -> pd.DataFrame:
         if log_returns:
             return np.log(self.price).diff()
-        return self.price.pct_change()
+        # fill_method=None: leading and interior gaps stay NaN instead of being
+        # forward filled into a fake zero return. pandas deprecated the padding
+        # default, and padding was never what this wanted.
+        return self.price.pct_change(fill_method=None)
 
     def slice(self, start=None, end=None) -> Panel:
         return Panel(self.price.loc[start:end], self.mcap.loc[start:end])
