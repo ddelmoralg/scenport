@@ -102,8 +102,8 @@ def test_exposure_is_the_weighted_beta(aggregate, market, tmp_path):
 
     runs = tmp_path / "runs"
     for forecaster, weights in (
-        ("timid", {"AAA": 0.0, "BBB": 0.0, "CCC": 1.0}),
-        ("bold", {"AAA": 0.0, "BBB": 1.0, "CCC": 0.0}),
+        ("rw", {"AAA": 0.0, "BBB": 0.0, "CCC": 1.0}),
+        ("garch", {"AAA": 0.0, "BBB": 1.0, "CCC": 0.0}),
     ):
         target = runs / "backtests" / forecaster / "ga_seed00"
         target.mkdir(parents=True)
@@ -112,11 +112,11 @@ def test_exposure_is_the_weighted_beta(aggregate, market, tmp_path):
 
     exposure = aggregate._portfolio_exposure(runs, directory, "ga")
 
-    assert set(exposure["forecaster"]) == {"timid", "bold"}
+    assert set(exposure["forecaster"]) == {"rw", "garch"}
     by_forecaster = exposure.groupby("forecaster")["exposure"].mean()
-    assert by_forecaster["bold"] > by_forecaster["timid"]
-    assert by_forecaster["timid"] == pytest.approx(0.0, abs=0.25)
-    assert by_forecaster["bold"] == pytest.approx(2.0, rel=0.3)
+    assert by_forecaster["garch"] > by_forecaster["rw"]
+    assert by_forecaster["rw"] == pytest.approx(0.0, abs=0.25)
+    assert by_forecaster["garch"] == pytest.approx(2.0, rel=0.3)
 
 
 def test_exposure_ignores_other_allocators(aggregate, market, tmp_path):

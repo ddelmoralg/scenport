@@ -226,9 +226,12 @@ def _portfolio_exposure(runs: Path, panel_dir: Path, allocator: str) -> pd.DataF
     the control for that, and it is the weights times the trailing asset betas, not
     anything measured over the period being explained.
     """
+    known = _known_forecasters()
     frames = []
     for path in sorted((runs / "backtests").rglob("weights.parquet")):
         if not path.parent.name.startswith(f"{allocator}_seed"):
+            continue
+        if path.parent.parent.name not in known:
             continue
         weights = pd.read_parquet(path)
         weights.index = pd.DatetimeIndex(weights.index)
@@ -292,10 +295,13 @@ def _transmission_panel(
     forecaster that held less of the market through 2022 scores well for a reason
     that is not forecast quality.
     """
+    known = _known_forecasters()
     periods = []
     for path in sorted((runs / "backtests").rglob("periods.parquet")):
         name = path.parent.name
         if not name.startswith(f"{allocator}_seed"):
+            continue
+        if path.parent.parent.name not in known:
             continue
         frame = pd.read_parquet(path)
         frame["forecaster"] = path.parent.parent.name
@@ -383,12 +389,40 @@ def _transmission_panel(
     return pd.DataFrame(rows)
 
 
+def _known_forecasters() -> set[str]:
+    """Names in the forecaster registry, and nothing else.
+
+    The ablation runs write to runs/backtests/<forecaster>_<tag>, so globbing the
+    tree and taking the directory name treats garch_card05 as a generator of its
+    own. It is not: the ablations vary the constraint set while holding the
+    generator fixed, which is the opposite of what the displacement measures.
+    Mixing them inflates the sample and contaminates a between-generator figure
+    with between-constraint movement.
+    """
+    from scenport.forecast import base as forecast_base
+    from scenport.plots import style
+
+    # The neural forecasters register on import and that import is deferred,
+    # because torch is optional. Pull it in if it is there, then union with the
+    # plotting order, which is the list the figures are drawn from and therefore
+    # the definitive one. Either source alone would silently drop a generator.
+    try:
+        import scenport.forecast.deep  # noqa: F401
+    except Exception:  # torch missing on this machine
+        pass
+
+    return set(forecast_base.available()) | set(style.FORECASTER_ORDER)
+
+
 def _load_weight_runs(runs: Path, allocator: str) -> dict:
     """Every stored weight path for one allocator, keyed by (forecaster, seed)."""
+    known = _known_forecasters()
     found = {}
     for path in sorted((runs / "backtests").rglob("weights.parquet")):
         name = path.parent.name
         if not name.startswith(f"{allocator}_seed"):
+            continue
+        if path.parent.parent.name not in known:
             continue
         seed = name.rsplit("_seed", 1)[-1]
         frame = pd.read_parquet(path)

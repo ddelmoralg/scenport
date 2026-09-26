@@ -46,7 +46,7 @@ def _tree(tmp_path, jitter: float, gap: float, n_dates: int = 20, seeds=("00", "
     base = np.array([0.4, 0.3, 0.2, 0.1, 0.0])
     other = np.roll(base, 1) * gap + base * (1 - gap)
 
-    for forecaster, centre in (("alpha", base), ("beta", other)):
+    for forecaster, centre in (("garch", base), ("prophet", other)):
         for seed in seeds:
             rows = []
             for _ in dates:
@@ -91,8 +91,8 @@ def test_support_overlap_counts_names_not_sizes(aggregate, tmp_path):
     sizes = [[0.9, 0.025, 0.025, 0.025, 0.025]] * len(dates)
     heavy = pd.DataFrame(sizes, index=dates, columns=ASSETS)
     flat = pd.DataFrame([[0.2] * 5] * len(dates), index=dates, columns=ASSETS)
-    _write(runs, "heavy", "00", heavy)
-    _write(runs, "flat", "00", flat)
+    _write(runs, "lgbm", "00", heavy)
+    _write(runs, "arima", "00", flat)
 
     between, _ = aggregate.table_displacement(runs, "ga")
     assert between.loc[0, "jaccard_mean"] == pytest.approx(1.0)
@@ -104,8 +104,8 @@ def test_disjoint_portfolios_have_no_overlap(aggregate, tmp_path):
     dates = pd.bdate_range("2023-01-31", periods=6, freq="ME")
     left = pd.DataFrame([[0.5, 0.5, 0.0, 0.0, 0.0]] * len(dates), index=dates, columns=ASSETS)
     right = pd.DataFrame([[0.0, 0.0, 0.5, 0.5, 0.0]] * len(dates), index=dates, columns=ASSETS)
-    _write(runs, "left", "00", left)
-    _write(runs, "right", "00", right)
+    _write(runs, "rw", "00", left)
+    _write(runs, "ets", "00", right)
 
     between, _ = aggregate.table_displacement(runs, "ga")
     assert between.loc[0, "jaccard_mean"] == pytest.approx(0.0)
@@ -123,7 +123,7 @@ def test_displacement_never_looks_at_returns(aggregate, tmp_path):
     before, _ = aggregate.table_displacement(runs, "ga")
 
     rng = np.random.default_rng(1)
-    for forecaster in ("alpha", "beta"):
+    for forecaster in ("garch", "prophet"):
         for seed in ("00", "01", "02"):
             target = runs / "backtests" / forecaster / f"ga_seed{seed}"
             dates = pd.read_parquet(target / "weights.parquet").index
@@ -140,7 +140,7 @@ def test_panel_has_one_row_per_generator_and_date(aggregate, tmp_path):
     panel = aggregate.displacement_by_date(runs, "ga")
 
     assert set(panel.columns) == {"rebalance", "forecaster", "displacement_l1", "support_overlap"}
-    assert set(panel["forecaster"]) == {"alpha", "beta"}
+    assert set(panel["forecaster"]) == {"garch", "prophet"}
     assert len(panel) == 12 * 2
     assert (panel["displacement_l1"] >= 0).all()
 
@@ -154,8 +154,43 @@ def test_empty_tree_is_not_fatal(aggregate, tmp_path):
 def test_other_allocators_are_ignored(aggregate, tmp_path):
     runs = _tree(tmp_path, jitter=0.01, gap=0.5)
     dates = pd.bdate_range("2023-01-31", periods=6, freq="ME")
-    _write(runs, "alpha", "00",
+    _write(runs, "garch", "00",
            pd.DataFrame([[0.2] * 5] * len(dates), index=dates, columns=ASSETS), allocator="hrp")
 
     between, _ = aggregate.table_displacement(runs, "hrp")
     assert between.empty, "one generator cannot make a pair"
+
+
+def test_ablation_runs_are_not_treated_as_generators(aggregate, tmp_path):
+    """The ablations vary the constraint set, not the generator.
+
+    They write to runs/backtests/<forecaster>_<tag>, so globbing the tree and
+    taking the directory name counts garch_card05 as a generator of its own. That
+    inflates the sample and, worse, mixes between-constraint movement into a
+    between-generator figure: relaxing the per-asset cap to 100% rearranges the
+    portfolio completely and has nothing to do with the scenarios.
+    """
+    runs = tmp_path / "runs"
+    dates = pd.bdate_range("2023-01-31", periods=8, freq="ME")
+    rng = np.random.default_rng(12)
+
+    for name in ("garch", "prophet", "garch_wmax100", "garch_card05"):
+        for seed in ("00", "01"):
+            rows = [np.abs(rng.normal(0.2, 0.05, 5)) for _ in dates]
+            rows = [r / r.sum() for r in rows]
+            _write(runs, name, seed, pd.DataFrame(rows, index=dates, columns=ASSETS))
+
+    between, within = aggregate.table_displacement(runs, "ga")
+
+    seen = set(between["forecaster_a"]) | set(between["forecaster_b"]) | set(within["forecaster"])
+    assert seen == {"garch", "prophet"}, seen
+    assert len(between) == 1, "two generators make exactly one pair"
+
+
+def test_known_forecasters_covers_the_neural_ones(aggregate):
+    """They register on a deferred import, so the registry alone is not enough."""
+    known = aggregate._known_forecasters()
+    for name in ("rw", "garch", "prophet_rmse", "lstm", "deepar", "transformer"):
+        assert name in known, name
+    for name in ("garch_card05", "garch_wmax100", "garch_nocouple"):
+        assert name not in known, name

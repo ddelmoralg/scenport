@@ -47,7 +47,7 @@ def _runs(tmp_path, gap: float, jitter: float = 0.01, seeds=("00", "01", "02")):
     base = np.array([0.4, 0.3, 0.2, 0.1, 0.0])
     other = np.roll(base, 1) * gap + base * (1 - gap)
 
-    for name, centre in (("alpha", base), ("beta", other)):
+    for name, centre in (("garch", base), ("prophet", other)):
         for seed in seeds:
             target = runs / "backtests" / name / f"ga_seed{seed}"
             target.mkdir(parents=True, exist_ok=True)
@@ -64,8 +64,8 @@ def _runs(tmp_path, gap: float, jitter: float = 0.01, seeds=("00", "01", "02")):
 def _summaries(sharpe_alpha: float, sharpe_beta: float) -> pd.DataFrame:
     return pd.DataFrame(
         [
-            {"forecaster": "alpha", "allocator": "ga", "sharpe": sharpe_alpha, "ann_return": 0.2},
-            {"forecaster": "beta", "allocator": "ga", "sharpe": sharpe_beta, "ann_return": 0.3},
+            {"forecaster": "garch", "allocator": "ga", "sharpe": sharpe_alpha, "ann_return": 0.2},
+            {"forecaster": "prophet", "allocator": "ga", "sharpe": sharpe_beta, "ann_return": 0.3},
         ]
     )
 
@@ -130,7 +130,7 @@ def test_the_table_carries_what_the_reading_rests_on(aggregate, tmp_path, panel_
     )
     for column in ("forecaster", "displacement", "displacement_over_noise", "overlap", "sharpe"):
         assert column in table, column
-    assert set(table["forecaster"]) == {"alpha", "beta"}
+    assert set(table["forecaster"]) == {"garch", "prophet"}
     assert headline["n_generators"] == 2
     assert np.isfinite(headline["noise_floor_l1"])
 
