@@ -118,6 +118,13 @@ The cluster needs a deploy key with write access. Set it up from here, once:
 bash scripts/setup_cluster_from_laptop.sh user@your-login-node
 ```
 
+On Windows, where bash is usually not on the path, there is a PowerShell version
+that does the same thing with the OpenSSH client Windows ships:
+
+```powershell
+.\scripts\setup_cluster_from_laptop.ps1 user@your-login-node
+```
+
 It copies `scripts/bootstrap_cluster.sh` over, runs it so the private key is born
 on the cluster and stays there, registers the public half through the GitHub API,
 and clones. Nothing to paste, and the only credential that reaches the cluster is a
