@@ -1,21 +1,33 @@
 from .tests import (
     TestResult,
+    cluster_bootstrap_ci,
+    cluster_robust_ols,
     deflated_sharpe,
     diebold_mariano,
+    minimum_detectable_correlation,
     model_confidence_set,
+    permutation_within_clusters,
     probability_of_backtest_overfitting,
+    required_sample_for_correlation,
     sharpe_difference,
     spa_test,
     stationary_bootstrap_ci,
+    within_transform,
 )
 
 __all__ = [
     "TestResult",
+    "cluster_bootstrap_ci",
+    "cluster_robust_ols",
     "deflated_sharpe",
     "diebold_mariano",
+    "minimum_detectable_correlation",
     "model_confidence_set",
+    "permutation_within_clusters",
     "probability_of_backtest_overfitting",
+    "required_sample_for_correlation",
     "sharpe_difference",
     "spa_test",
     "stationary_bootstrap_ci",
+    "within_transform",
 ]

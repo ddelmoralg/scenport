@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +27,7 @@ from scenport.backtest import metrics  # noqa: E402
 
 log = logging.getLogger("aggregate")
 
-TABLES = ("main", "forecasts", "transmission", "tests", "regimes", "exact")
+TABLES = ("main", "forecasts", "transmission", "displacement", "tests", "regimes", "exact")
 
 QUALITY_COLUMNS = {
     "mase": "point accuracy",
@@ -34,8 +35,12 @@ QUALITY_COLUMNS = {
     "pinball": "quantile loss",
     "coverage_error": "interval calibration",
     "pit_ks": "PIT uniformity",
-    "energy_score": "joint accuracy",
-    "variogram_score": "dependence accuracy",
+    # The energy score is known to discriminate weakly against a misspecified
+    # dependence structure (Scheuerer and Hamill, 2015), so anything said about
+    # the coupling stage leans on the variogram and the energy score is reported
+    # beside it rather than instead of it.
+    "energy_score": "joint accuracy (weak against misspecified dependence)",
+    "variogram_score": "dependence accuracy (primary for the coupling stage)",
 }
 
 
@@ -127,8 +132,10 @@ def table_transmission(
     summaries: pd.DataFrame,
     per_asset: pd.DataFrame,
     forecast_quality: pd.DataFrame,
+    joint: pd.DataFrame,
     runs: Path,
     reference_allocator: str = "ga",
+    panel_dir: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Does forecast quality carry through to portfolio performance?
 
@@ -147,23 +154,143 @@ def table_transmission(
         if column not in merged or merged[column].notna().sum() < 4:
             continue
         rho, p = sps.spearmanr(merged[column], merged["sharpe"], nan_policy="omit")
+        n = int(merged[column].notna().sum())
         cross_rows.append(
             {
                 "score": column,
                 "measures": description,
                 "spearman_vs_sharpe": rho,
                 "p_value": p,
-                "n_forecasters": int(merged[column].notna().sum()),
+                "n_forecasters": n,
+                # Declared in advance, and printed next to the correlation so no
+                # reader has to work out whether this column could have found
+                # anything. With eleven forecasters it is around 0.76.
+                #
+                # This is the power of the *between-generator ranking*, and the
+                # panel does not rescue it: however many forecaster-date rows the
+                # panel has, a pure ordering of the generators still rests on
+                # eleven units. What the panel buys power for is the part of the
+                # relationship that varies by date, which is a different question
+                # and is reported in the panel table.
+                "min_detectable_rho": tests.minimum_detectable_correlation(n),
+                "n_for_rho_0.3": tests.required_sample_for_correlation(0.3),
             }
         )
     cross = pd.DataFrame(cross_rows)
 
-    panel = _transmission_panel(per_asset, runs, reference_allocator)
+    panel = _transmission_panel(per_asset, joint, runs, reference_allocator, panel_dir)
     return cross, panel
 
 
-def _transmission_panel(per_asset: pd.DataFrame, runs: Path, allocator: str) -> pd.DataFrame:
-    """Within-date regression of period return on forecast quality."""
+def _market_betas(panel_dir: Path, dates, window_days: int = 365) -> pd.DataFrame:
+    """Trailing beta of every asset against the cap-weighted index, one row per date.
+
+    Estimated strictly on the window ending the day before the rebalancing date, so
+    nothing here can see the period it is used to control.
+    """
+    from scenport.data.panel import Panel
+
+    try:
+        panel = Panel.read(panel_dir)
+    except FileNotFoundError:
+        return pd.DataFrame()
+
+    returns = panel.returns()
+    caps = panel.mcap.reindex(returns.index).shift(1)
+    market_weights = caps.div(caps.sum(axis=1), axis=0)
+    market = (returns * market_weights).sum(axis=1)
+
+    rows = {}
+    for date in pd.DatetimeIndex(dates):
+        start = date - pd.Timedelta(days=window_days)
+        window = returns.loc[start : date - pd.Timedelta(days=1)]
+        bench = market.loc[start : date - pd.Timedelta(days=1)]
+        if len(bench) < 60:
+            continue
+        variance = float(np.nanvar(bench.to_numpy()))
+        if variance <= 0:
+            continue
+        aligned = window.sub(window.mean())
+        centred_bench = bench - bench.mean()
+        cov = aligned.mul(centred_bench, axis=0).mean()
+        rows[date] = cov / variance
+    return pd.DataFrame(rows).T if rows else pd.DataFrame()
+
+
+def _portfolio_exposure(runs: Path, panel_dir: Path, allocator: str) -> pd.DataFrame:
+    """Ex-ante market exposure of each forecaster's portfolio at each rebalancing.
+
+    A forecaster that happened to hold less of the market in 2022 looks good on
+    Sharpe for a reason that has nothing to do with how well it forecast. This is
+    the control for that, and it is the weights times the trailing asset betas, not
+    anything measured over the period being explained.
+    """
+    frames = []
+    for path in sorted((runs / "backtests").rglob("weights.parquet")):
+        if not path.parent.name.startswith(f"{allocator}_seed"):
+            continue
+        weights = pd.read_parquet(path)
+        weights.index = pd.DatetimeIndex(weights.index)
+        frames.append((path.parent.parent.name, weights))
+    if not frames:
+        return pd.DataFrame()
+
+    all_dates = sorted({d for _, w in frames for d in w.index})
+    betas = _market_betas(panel_dir, all_dates)
+    if betas.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for forecaster, weights in frames:
+        for date, w in weights.iterrows():
+            if date not in betas.index:
+                continue
+            b = betas.loc[date].reindex(w.index)
+            usable = w.notna() & b.notna()
+            if not usable.any():
+                continue
+            rows.append(
+                {
+                    "rebalance": date,
+                    "forecaster": forecaster,
+                    "exposure": float((w[usable] * b[usable]).sum()),
+                }
+            )
+    if not rows:
+        return pd.DataFrame()
+    return (
+        pd.DataFrame(rows)
+        .groupby(["rebalance", "forecaster"], as_index=False)["exposure"]
+        .mean()
+    )
+
+
+def _transmission_panel(
+    per_asset: pd.DataFrame,
+    joint: pd.DataFrame,
+    runs: Path,
+    allocator: str,
+    panel_dir: Path | None = None,
+) -> pd.DataFrame:
+    """Within-date regression of period return on forecast quality.
+
+    The unit is the forecaster-date pair, not the forecaster. Eleven forecasters
+    give eleven points and a correlation on eleven points cannot resolve anything
+    below about 0.76, which is reported in the cross-sectional table. Here the same
+    eleven give several hundred observations across the rebalancing calendar.
+
+    Three things are done to keep that from being a cheat. The date carries a fixed
+    effect, so the coefficient is identified off the cross-section of forecasters
+    inside one month and not off the market. Standard errors are clustered on the
+    date and the interval comes from resampling whole dates, because the months
+    overlap and the forecasters inside a month share a market. And the p value is a
+    permutation over which forecaster got which score inside each date, which
+    assumes nothing about the errors.
+
+    Market exposure enters as a control where the weights are available: a
+    forecaster that held less of the market through 2022 scores well for a reason
+    that is not forecast quality.
+    """
     periods = []
     for path in sorted((runs / "backtests").rglob("periods.parquet")):
         name = path.parent.name
@@ -183,44 +310,238 @@ def _transmission_panel(per_asset: pd.DataFrame, runs: Path, allocator: str) -> 
             ["mase", "crps", "pinball", "coverage_error"]
         ].mean()
     )
-    panel = performance.merge(quality, on=["rebalance", "forecaster"], how="inner").dropna()
+    panel = performance.merge(quality, on=["rebalance", "forecaster"], how="inner")
+
+    # The joint scores live on their own rows because they are not per asset. They
+    # are also the only two that say anything about the coupling stage, so leaving
+    # them out of the panel would mean the dependence half of the scenario
+    # generator never gets tested at all.
+    joint_columns = [c for c in ("energy_score", "variogram_score") if c in joint]
+    if joint_columns:
+        joint_quality = (
+            joint.groupby(["rebalance", "forecaster"], as_index=False)[joint_columns].mean()
+        )
+        panel = panel.merge(joint_quality, on=["rebalance", "forecaster"], how="left")
+
+    exposure = (
+        _portfolio_exposure(runs, panel_dir, allocator)
+        if panel_dir is not None
+        else pd.DataFrame()
+    )
+    controlled = not exposure.empty
+    if controlled:
+        panel = panel.merge(exposure, on=["rebalance", "forecaster"], how="left")
+        if panel["exposure"].isna().mean() > 0.2:
+            log.warning("market exposure missing for most rows; reporting without the control")
+            panel = panel.drop(columns="exposure")
+            controlled = False
+
+    required = ["net_return", "mase", "crps", "pinball", "coverage_error"]
+    if controlled:
+        required.append("exposure")
+    panel = panel.dropna(subset=[c for c in required if c in panel])
     if panel.empty:
         return panel
 
-    rows = []
-    for column in ("mase", "crps", "pinball", "coverage_error"):
-        # Within transform: subtract the date mean from both sides. Algebraically
-        # identical to a full set of date dummies and far cheaper.
-        demeaned = panel.copy()
-        for col in ("net_return", column):
-            demeaned[col] = demeaned[col] - demeaned.groupby("rebalance")[col].transform("mean")
-        x, y = demeaned[column].to_numpy(), demeaned["net_return"].to_numpy()
-        if np.std(x) == 0:
-            continue
-        beta = float(np.dot(x, y) / np.dot(x, x))
-        resid = y - beta * x
+    scores = [
+        c
+        for c in ("mase", "crps", "pinball", "coverage_error", "energy_score", "variogram_score")
+        if c in panel
+    ]
 
-        # Cluster-robust by date: the same market shock hits every forecaster in a
-        # given month, so independent errors would understate the standard error.
-        bread = 1.0 / np.dot(x, x)
-        meat = 0.0
-        for _, idx in demeaned.groupby("rebalance").indices.items():
-            score_c = float(np.dot(x[idx], resid[idx]))
-            meat += score_c**2
-        se = float(np.sqrt(bread * meat * bread))
-        t = beta / se if se > 0 else np.nan
+    rows = []
+    for column in scores:
+        regressors = [column] + (["exposure"] if controlled else [])
+        demeaned = tests.within_transform(panel, ["net_return", *regressors], "rebalance")
+        x = demeaned[regressors].to_numpy(float)
+        y = demeaned["net_return"].to_numpy(float)
+        if np.allclose(x[:, 0], 0.0):
+            continue
+
+        clusters = panel["rebalance"].to_numpy()
+        fit = tests.cluster_robust_ols(y, x, clusters)
+        ci = tests.cluster_bootstrap_ci(y, x, clusters, column=0, reps=2000, seed=0)
+        perm = tests.permutation_within_clusters(y, x, clusters, column=0, reps=5000, seed=0)
+
         rows.append(
             {
                 "score": column,
-                "beta": beta,
-                "std_error": se,
-                "t_stat": t,
-                "p_value": float(2 * (1 - sps.norm.cdf(abs(t)))) if np.isfinite(t) else np.nan,
-                "n_obs": len(panel),
-                "n_dates": panel["rebalance"].nunique(),
+                "beta": float(fit["beta"][0]),
+                "std_error": float(fit["std_error"][0]),
+                "t_stat": float(fit["t_stat"][0]),
+                "p_clustered": float(fit["p_value"][0]),
+                "p_permutation": float(perm.p_value),
+                "ci_lower": ci["lower"],
+                "ci_upper": ci["upper"],
+                "exposure_controlled": controlled,
+                "beta_exposure": float(fit["beta"][1]) if controlled else np.nan,
+                "n_obs": int(fit["n_obs"]),
+                "n_dates": int(fit["n_clusters"]),
             }
         )
     return pd.DataFrame(rows)
+
+
+def _load_weight_runs(runs: Path, allocator: str) -> dict:
+    """Every stored weight path for one allocator, keyed by (forecaster, seed)."""
+    found = {}
+    for path in sorted((runs / "backtests").rglob("weights.parquet")):
+        name = path.parent.name
+        if not name.startswith(f"{allocator}_seed"):
+            continue
+        seed = name.rsplit("_seed", 1)[-1]
+        frame = pd.read_parquet(path)
+        frame.index = pd.DatetimeIndex(frame.index)
+        found[(path.parent.parent.name, seed)] = frame.sort_index()
+    return found
+
+
+def _pair_distance(a: pd.DataFrame, b: pd.DataFrame, tol: float) -> pd.DataFrame:
+    """L1 distance and support overlap between two weight histories, per date."""
+    dates = a.index.intersection(b.index)
+    if len(dates) == 0:
+        return pd.DataFrame()
+    assets = a.columns.union(b.columns)
+    wa = a.reindex(index=dates, columns=assets).fillna(0.0)
+    wb = b.reindex(index=dates, columns=assets).fillna(0.0)
+
+    l1 = (wa - wb).abs().sum(axis=1)
+
+    held_a, held_b = wa > tol, wb > tol
+    intersection = (held_a & held_b).sum(axis=1)
+    union = (held_a | held_b).sum(axis=1)
+    jaccard = intersection.divide(union.replace(0, np.nan))
+
+    return pd.DataFrame({"rebalance": dates, "l1": l1.to_numpy(), "jaccard": jaccard.to_numpy()})
+
+
+def table_displacement(
+    runs: Path, allocator: str = "ga", tol: float = 1e-6
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """How far the chosen portfolio moves when the scenario generator is swapped.
+
+    This is the dependent quantity the sensitivity question actually asks about, and
+    it is not the same thing as realised performance. It needs no outcome data at
+    all: it is measured entirely from the decisions, which is what keeps it from
+    collapsing into "forecast quality in disguise".
+
+    Two frames come back. The first is every pair of generators. The second is the
+    same estimator applied to one generator rerun under a different seed, which is
+    the noise floor: before claiming the decision moves because the generator
+    changed, we have to know how far it moves when nothing changes but the random
+    draw. Both use cross-seed pairs, so they are measured the same way and the ratio
+    between them means something.
+
+    ``l1`` runs from 0 to 2 for two portfolios on the simplex. ``jaccard`` is the
+    overlap of the chosen assets, 1 when both hold exactly the same names.
+    """
+    stored = _load_weight_runs(runs, allocator)
+    if not stored:
+        return pd.DataFrame(), pd.DataFrame()
+
+    by_forecaster: dict[str, list] = {}
+    for (forecaster, seed), frame in stored.items():
+        by_forecaster.setdefault(forecaster, []).append((seed, frame))
+
+    within_rows = []
+    for forecaster, runs_for_one in sorted(by_forecaster.items()):
+        pieces = [
+            _pair_distance(a, b, tol)
+            for (_, a), (_, b) in combinations(sorted(runs_for_one, key=lambda x: x[0]), 2)
+        ]
+        pieces = [p for p in pieces if not p.empty]
+        if not pieces:
+            continue
+        joined = pd.concat(pieces)
+        within_rows.append(
+            {
+                "forecaster": forecaster,
+                "l1_mean": float(joined["l1"].mean()),
+                "l1_median": float(joined["l1"].median()),
+                "jaccard_mean": float(joined["jaccard"].mean()),
+                "n_pairs": len(pieces),
+                "n_comparisons": int(len(joined)),
+            }
+        )
+    within = pd.DataFrame(within_rows)
+
+    noise_floor = float(within["l1_mean"].mean()) if not within.empty else np.nan
+
+    between_rows = []
+    for left, right in combinations(sorted(by_forecaster), 2):
+        pieces = [
+            _pair_distance(a, b, tol)
+            for _, a in by_forecaster[left]
+            for _, b in by_forecaster[right]
+        ]
+        pieces = [p for p in pieces if not p.empty]
+        if not pieces:
+            continue
+        joined = pd.concat(pieces)
+        l1_mean = float(joined["l1"].mean())
+        between_rows.append(
+            {
+                "forecaster_a": left,
+                "forecaster_b": right,
+                "l1_mean": l1_mean,
+                "l1_median": float(joined["l1"].median()),
+                "jaccard_mean": float(joined["jaccard"].mean()),
+                # Everything the paper says about between-generator displacement is
+                # said relative to this. Below 1 means swapping the generator moves
+                # the portfolio less than rerunning the same one with a new seed.
+                "over_noise_floor": l1_mean / noise_floor if noise_floor else np.nan,
+                "n_comparisons": int(len(joined)),
+            }
+        )
+
+    between = pd.DataFrame(between_rows)
+    if not between.empty:
+        between = between.sort_values("l1_mean", ascending=False, ignore_index=True)
+        between.attrs["noise_floor_l1"] = noise_floor
+    return between, within
+
+
+def displacement_by_date(runs: Path, allocator: str = "ga", tol: float = 1e-6) -> pd.DataFrame:
+    """Mean pairwise displacement per rebalancing date, for the panel.
+
+    One row per date per generator: how far that generator's portfolio sits from the
+    portfolios every other generator chose on the same date. This is the left-hand
+    side of the clean half of the study, the half that needs no outcome data.
+    """
+    stored = _load_weight_runs(runs, allocator)
+    if not stored:
+        return pd.DataFrame()
+
+    seed_mean: dict[str, pd.DataFrame] = {}
+    grouped: dict[str, list] = {}
+    for (forecaster, _), frame in stored.items():
+        grouped.setdefault(forecaster, []).append(frame)
+    for forecaster, frames in grouped.items():
+        assets = frames[0].columns
+        for f in frames[1:]:
+            assets = assets.union(f.columns)
+        aligned = [f.reindex(columns=assets).fillna(0.0) for f in frames]
+        seed_mean[forecaster] = sum(aligned) / len(aligned)
+
+    rows = []
+    names = sorted(seed_mean)
+    for left, right in combinations(names, 2):
+        pair = _pair_distance(seed_mean[left], seed_mean[right], tol)
+        if pair.empty:
+            continue
+        for name in (left, right):
+            block = pair.copy()
+            block["forecaster"] = name
+            rows.append(block)
+    if not rows:
+        return pd.DataFrame()
+
+    return (
+        pd.concat(rows)
+        .groupby(["rebalance", "forecaster"], as_index=False)[["l1", "jaccard"]]
+        .mean()
+        .rename(columns={"l1": "displacement_l1", "jaccard": "support_overlap"})
+    )
 
 
 def table_tests(daily: pd.DataFrame, summaries: pd.DataFrame, cfg) -> pd.DataFrame:
@@ -376,12 +697,37 @@ def main() -> int:
 
     if "transmission" in args.only:
         cross, panel = table_transmission(
-            summaries, per_asset, quality, runs, args.reference_allocator
+            summaries, per_asset, quality, joint, runs, args.reference_allocator,
+            cfg.resolve("paths.panel", root),
         )
         write(cross, artifacts, "transmission_cross",
-              "Rank correlation between forecast quality and portfolio Sharpe.")
+              "Rank correlation between forecast quality and portfolio Sharpe, across "
+              "generators. min_detectable_rho is the smallest correlation this "
+              "many generators could resolve at 80% power; the panel below does "
+              "not improve it, because ranking generators rests on the number of "
+              "generators however many rows are stacked underneath.")
         write(panel, artifacts, "transmission_panel",
-              "Period return on forecast quality, with a fixed effect per rebalancing date.")
+              "Period return on forecast quality, with a fixed effect per rebalancing "
+              "date, errors clustered on the date, interval from resampling whole "
+              "dates and p value from permuting scores within a date. This is powered "
+              "for the date-varying part of the relationship, not for a ranking of "
+              "the generators.")
+
+    if "displacement" in args.only:
+        between, within = table_displacement(runs, args.reference_allocator)
+        if between.empty:
+            log.warning("no stored weights; skipping the displacement tables")
+        else:
+            floor = between.attrs.get("noise_floor_l1", float("nan"))
+            write(between, artifacts, "displacement_between",
+                  "Pairwise decision displacement between scenario generators. "
+                  f"Mean L1 within one generator across seeds: {floor:.4f}.")
+            write(within, artifacts, "displacement_within",
+                  "Decision displacement from rerunning one generator with a new seed. "
+                  "This is the floor every between-generator figure is quoted against.")
+            by_date = displacement_by_date(runs, args.reference_allocator)
+            if not by_date.empty:
+                by_date.to_parquet(artifacts / "displacement_panel.parquet", index=False)
 
     if {"tests", "regimes"} & set(args.only):
         daily = load_daily(runs)

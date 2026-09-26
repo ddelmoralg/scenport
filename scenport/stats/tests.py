@@ -328,3 +328,192 @@ def stationary_bootstrap_ci(
         "upper": float(hi),
         "reps": int(draws.size),
     }
+
+
+# ---------------------------------------------------------------------------
+# Panel inference
+#
+# Eleven forecasters give eleven points, and a correlation on eleven pairs can
+# only resolve very large effects: see ``minimum_detectable_correlation``, which
+# is reported alongside every cross-sectional figure so nobody has to work it out
+# for themselves. The panel below is the answer to that. The unit of analysis is
+# the forecaster-date pair, dates carry a fixed effect, and inference is clustered
+# on the date, because the same market move hits every forecaster in a month.
+
+
+def within_transform(frame: pd.DataFrame, columns, group: str) -> pd.DataFrame:
+    """Subtract the group mean from each column. Same as a full set of dummies."""
+    out = frame.copy()
+    for column in columns:
+        out[column] = out[column] - out.groupby(group)[column].transform("mean")
+    return out
+
+
+def cluster_robust_ols(
+    y: np.ndarray, X: np.ndarray, clusters: np.ndarray, *, small_sample: bool = True
+) -> dict:
+    """OLS with standard errors clustered on ``clusters``.
+
+    ``X`` carries no intercept: this is meant to be fed demeaned data, where the
+    fixed effect has already absorbed it. Returns coefficients, cluster-robust
+    standard errors, t statistics and normal-approximation p values.
+    """
+    y = np.asarray(y, dtype=float)
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    if X.shape[0] != y.shape[0]:
+        X = X.T
+    n, k = X.shape
+
+    xtx = X.T @ X
+    bread = np.linalg.pinv(xtx)
+    beta = bread @ (X.T @ y)
+    resid = y - X @ beta
+
+    labels = np.asarray(clusters)
+    meat = np.zeros((k, k))
+    for label in np.unique(labels):
+        idx = labels == label
+        score = X[idx].T @ resid[idx]
+        meat += np.outer(score, score)
+
+    n_clusters = int(np.unique(labels).size)
+    scale = 1.0
+    if small_sample and n_clusters > 1 and n > k:
+        scale = (n_clusters / (n_clusters - 1)) * ((n - 1) / (n - k))
+
+    cov = bread @ meat @ bread * scale
+    se = np.sqrt(np.clip(np.diag(cov), 0.0, None))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = np.where(se > 0, beta / se, np.nan)
+    p = 2 * (1 - stats.norm.cdf(np.abs(t)))
+    return {
+        "beta": beta,
+        "std_error": se,
+        "t_stat": t,
+        "p_value": p,
+        "n_obs": int(n),
+        "n_clusters": n_clusters,
+    }
+
+
+def cluster_bootstrap_ci(
+    y: np.ndarray,
+    X: np.ndarray,
+    clusters: np.ndarray,
+    *,
+    column: int = 0,
+    reps: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 0,
+) -> dict:
+    """Percentile interval from resampling whole dates with replacement.
+
+    Resampling the date and not the observation is the point. Rebalancing windows
+    overlap and the forecasters inside a date share a market, so drawing single
+    observations would treat dependent data as independent and give an interval
+    that is too narrow.
+    """
+    y = np.asarray(y, dtype=float)
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    if X.shape[0] != y.shape[0]:
+        X = X.T
+    labels = np.asarray(clusters)
+    unique = np.unique(labels)
+    index_of = {label: np.flatnonzero(labels == label) for label in unique}
+
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(reps):
+        picked = rng.choice(unique, size=unique.size, replace=True)
+        rows = np.concatenate([index_of[label] for label in picked])
+        xb, yb = X[rows], y[rows]
+        try:
+            beta = np.linalg.pinv(xb.T @ xb) @ (xb.T @ yb)
+        except np.linalg.LinAlgError:
+            continue
+        draws.append(beta[column])
+
+    draws = np.asarray([d for d in draws if np.isfinite(d)])
+    if draws.size == 0:
+        return {"lower": np.nan, "upper": np.nan, "reps": 0}
+    lo, hi = np.quantile(draws, [(1 - confidence) / 2, 1 - (1 - confidence) / 2])
+    return {"lower": float(lo), "upper": float(hi), "reps": int(draws.size)}
+
+
+def permutation_within_clusters(
+    y: np.ndarray,
+    X: np.ndarray,
+    clusters: np.ndarray,
+    *,
+    column: int = 0,
+    reps: int = 5000,
+    seed: int = 0,
+) -> TestResult:
+    """Shuffle one regressor inside each date and refit.
+
+    The null is that, within a month, which forecaster got which score tells you
+    nothing about which portfolio did well. Permuting inside the date holds the
+    month fixed, so the market, the universe and the constraint set are all held
+    with it. Nothing is assumed about the shape of the errors.
+    """
+    y = np.asarray(y, dtype=float)
+    X = np.atleast_2d(np.asarray(X, dtype=float)).copy()
+    if X.shape[0] != y.shape[0]:
+        X = X.T
+    labels = np.asarray(clusters)
+    groups = [np.flatnonzero(labels == label) for label in np.unique(labels)]
+
+    def fit(design: np.ndarray) -> float:
+        beta = np.linalg.pinv(design.T @ design) @ (design.T @ y)
+        return float(beta[column])
+
+    observed = fit(X)
+    rng = np.random.default_rng(seed)
+    shuffled = X.copy()
+    extreme = 0
+    drawn = 0
+    for _ in range(reps):
+        for idx in groups:
+            shuffled[idx, column] = rng.permutation(X[idx, column])
+        value = fit(shuffled)
+        if not np.isfinite(value):
+            continue
+        drawn += 1
+        if abs(value) >= abs(observed):
+            extreme += 1
+
+    # Add-one on both sides: a permutation p value is never exactly zero.
+    p = (extreme + 1) / (drawn + 1) if drawn else np.nan
+    return TestResult(
+        statistic=observed,
+        p_value=float(p),
+        detail={"reps": drawn, "extreme": extreme},
+    )
+
+
+def minimum_detectable_correlation(
+    n: int, alpha: float = 0.05, power: float = 0.80
+) -> float:
+    """Smallest correlation a sample of ``n`` pairs can find, two sided.
+
+    Declared in advance, and reported next to every cross-sectional correlation in
+    the paper. With eleven forecasters the answer is around 0.76, which is why the
+    cross-section cannot carry a conclusion on its own and the panel exists.
+    """
+    if n is None or n <= 3:
+        return float("nan")
+    z_alpha = stats.norm.ppf(1 - alpha / 2)
+    z_power = stats.norm.ppf(power)
+    return float(np.tanh((z_alpha + z_power) / np.sqrt(n - 3)))
+
+
+def required_sample_for_correlation(
+    rho: float, alpha: float = 0.05, power: float = 0.80
+) -> int:
+    """How many pairs it would take to find a correlation of ``rho``."""
+    rho = abs(float(rho))
+    if not 0 < rho < 1:
+        return -1
+    z_alpha = stats.norm.ppf(1 - alpha / 2)
+    z_power = stats.norm.ppf(power)
+    return int(np.ceil(((z_alpha + z_power) / np.arctanh(rho)) ** 2 + 3))
