@@ -26,7 +26,18 @@
 #   fc_gpu=$(sbatch --parsable slurm/20_forecast_gpu.sh)
 #   sbatch --dependency=afterok:$fc_cpu:$fc_gpu slurm/30_backtest.sh
 
-source "$(dirname "$0")/env.sh"
+# Inside a batch job $0 is the copy SLURM spooled under /var/spool, not this file
+# in the repository, so dirname "$0" finds nothing. SLURM_SUBMIT_DIR is where
+# sbatch was run, which submit_all.sh makes the repository root.
+SCENPORT_ROOT="${SCENPORT_ROOT:-${SLURM_SUBMIT_DIR:-$HOME/scenport}}"
+export SCENPORT_ROOT
+if [ ! -f "$SCENPORT_ROOT/slurm/env.sh" ]; then
+    echo "cannot find slurm/env.sh under '$SCENPORT_ROOT'" >&2
+    echo "set SCENPORT_ROOT or submit from the repository root" >&2
+    exit 1
+fi
+# shellcheck disable=SC1091
+source "$SCENPORT_ROOT/slurm/env.sh"
 
 FORECASTERS=(rw rw_nodrift arima ets garch prophet prophet_rmse lgbm lstm deepar transformer)
 forecaster=${FORECASTERS[${SLURM_ARRAY_TASK_ID:-0}]}

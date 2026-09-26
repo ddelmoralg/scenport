@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=24G
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-127%20
+#SBATCH --array=0-127%12
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 
@@ -22,12 +22,24 @@
 # parallel inside a task, which is much more effective than trying to parallelise a
 # single Stan fit.
 #
-# Twenty tasks at a time is 160 of the node's 224 cores, which leaves the GPU job
-# its 24 and still keeps something free for everyone else.
+# Twelve at a time is 96 cores. The node has 224 but the medium queue carries a
+# group QOS cap of 112 shared with everyone else on it, so anything above that
+# just queues. This leaves the GPU job its 24 and a little for other people.
 #
 #   sbatch slurm/10_forecast_cpu.sh
 
-source "$(dirname "$0")/env.sh"
+# Inside a batch job $0 is the copy SLURM spooled under /var/spool, not this file
+# in the repository, so dirname "$0" finds nothing. SLURM_SUBMIT_DIR is where
+# sbatch was run, which submit_all.sh makes the repository root.
+SCENPORT_ROOT="${SCENPORT_ROOT:-${SLURM_SUBMIT_DIR:-$HOME/scenport}}"
+export SCENPORT_ROOT
+if [ ! -f "$SCENPORT_ROOT/slurm/env.sh" ]; then
+    echo "cannot find slurm/env.sh under '$SCENPORT_ROOT'" >&2
+    echo "set SCENPORT_ROOT or submit from the repository root" >&2
+    exit 1
+fi
+# shellcheck disable=SC1091
+source "$SCENPORT_ROOT/slurm/env.sh"
 
 FORECASTERS=(rw rw_nodrift arima ets garch prophet prophet_rmse lgbm)
 N_SHARDS=16

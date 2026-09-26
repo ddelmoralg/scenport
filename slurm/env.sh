@@ -1,8 +1,10 @@
 # Sourced by every job script. Edit this file, not the job scripts.
 #
 # Queues on this cluster: short (4 h, default), medium (24 h), long (7 days).
-# One compute node, 224 cores and 8 H100s, so array concurrency limits matter more
-# than node counts -- see the %N on each array job.
+# One compute node with 224 cores and 8 H100s, but the queues carry group QOS caps
+# that bind long before the hardware does: medium allows 112 cores and 4 GPUs,
+# long allows 56 cores and 2 GPUs, shared with everyone else on the queue. Size
+# the %N on each array against those, not against the node.
 #
 # The cluster does not have a system Python new enough for the pinned versions, so
 # everything lives in one conda environment created from environment.yml.
