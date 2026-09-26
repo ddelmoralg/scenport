@@ -37,9 +37,20 @@ if ! command -v conda >/dev/null 2>&1; then
     exit 1
 fi
 
+# Conda's own hooks are not written for a strict shell. prophet ships an
+# activate.d script that reads $CMDSTAN before setting it, which under `set -u`
+# aborts the activation and leaves the job running against the base interpreter.
+# Relax nounset across the activation only.
+set +u
 # shellcheck disable=SC1091
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "$SCENPORT_ENV"
+set -u
+
+if [ "${CONDA_DEFAULT_ENV:-}" != "$SCENPORT_ENV" ]; then
+    echo "conda activate '$SCENPORT_ENV' did not take (now in '${CONDA_DEFAULT_ENV:-none}')" >&2
+    exit 1
+fi
 
 cd "$SCENPORT_ROOT"
 mkdir -p logs
