@@ -62,33 +62,81 @@ def _batched(items: list[str], n: int) -> Iterator[list[str]]:
         yield items[i : i + n]
 
 
+def _catalog_pages(session: _Session, url: str, params: dict) -> Iterator[dict]:
+    """Every page of a catalog response.
+
+    The catalog paginates like the timeseries endpoints do. Reading only the first
+    page silently truncates the asset list, which would then quietly shrink the
+    investable universe without anything failing.
+    """
+    payload = session.get(url, params=params)
+    while True:
+        yield payload
+        following = payload.get("next_page_url")
+        if not following:
+            return
+        payload = session.get(following)
+
+
+def _daily_on_community(frequencies: list[dict]) -> bool:
+    """Daily coverage that this API tier will actually serve.
+
+    An asset can carry a metric that the community tier does not expose. Without
+    this check it lands in the universe and then comes back as an empty series.
+    """
+    for entry in frequencies:
+        if entry.get("frequency") != "1d":
+            continue
+        if entry.get("community", True):
+            return True
+    return False
+
+
 def available_assets(metrics: Iterable[str], session: _Session | None = None) -> list[str]:
     """Assets that expose every requested metric at daily frequency.
 
-    The catalog response shape has changed across v4 revisions, so both the
-    metric-major and the asset-major layouts are handled.
+    The catalog response shape has changed across v4 revisions. Current asset-major
+    responses carry ``metrics`` as a list of ``{"metric", "frequencies"}``; older
+    ones used a mapping keyed by metric name, and there is a metric-major layout as
+    well. All three are handled.
     """
     session = session or _Session()
     wanted = list(metrics)
     per_metric: list[set[str]] = []
 
     for metric in wanted:
-        payload = session.get(f"{BASE}/catalog-v2/asset-metrics", params={"metrics": metric})
         found: set[str] = set()
-        for entry in payload.get("data", []):
-            if "asset" in entry:                                    # asset-major
-                freqs = {f.get("frequency") for f in entry.get("metrics", {}).get(metric, [])}
-                if "1d" in freqs or not freqs:
-                    found.add(entry["asset"])
-            else:                                                   # metric-major
-                for freq in entry.get("frequencies", []):
-                    if freq.get("frequency") == "1d":
-                        found.update(freq.get("assets", []))
+        for payload in _catalog_pages(
+            session, f"{BASE}/catalog-v2/asset-metrics", {"metrics": metric}
+        ):
+            for entry in payload.get("data", []):
+                asset = entry.get("asset")
+                if asset is None:                                   # metric-major
+                    for freq in entry.get("frequencies", []):
+                        if freq.get("frequency") == "1d":
+                            found.update(freq.get("assets", []))
+                    continue
+
+                listed = entry.get("metrics", [])
+                if isinstance(listed, dict):                        # older asset-major
+                    if _daily_on_community(listed.get(metric, [])):
+                        found.add(asset)
+                    continue
+
+                for item in listed:                                 # current asset-major
+                    if item.get("metric") != metric:
+                        continue
+                    if _daily_on_community(item.get("frequencies", [])):
+                        found.add(asset)
+
         if not found:
             raise CoinMetricsError(f"catalog returned no daily coverage for {metric!r}")
+        log.info("%s: %d assets with daily community coverage", metric, len(found))
         per_metric.append(found)
 
-    return sorted(set.intersection(*per_metric))
+    both = sorted(set.intersection(*per_metric))
+    log.info("%d assets carry all of %s", len(both), ", ".join(wanted))
+    return both
 
 
 def fetch(
