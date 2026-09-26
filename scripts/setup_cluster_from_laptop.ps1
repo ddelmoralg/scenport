@@ -79,8 +79,24 @@ $body = ($pubkey -split ' ')[0..1] -join ' '
 if ($existing -and ($existing | Where-Object { $_.StartsWith($body) })) {
     Write-Host "    already registered"
 } else {
-    gh api "repos/$Repo/keys" -f "title=$title" -f "key=$pubkey" -F read_only=false --jq '"    added key id \(.id), write access"'
-    if ($LASTEXITCODE -ne 0) { Write-Error "could not register the deploy key" }
+    # No jq formatting here. PowerShell takes the quotes off the expression before
+    # gh sees it, so a jq string literal arrives as bare tokens and gh fails to
+    # parse it. That failure came after the POST had already gone through, so the
+    # key was registered and the script reported it as an error anyway.
+    $out = gh api "repos/$Repo/keys" -f "title=$title" -f "key=$pubkey" -F read_only=false
+    if ($LASTEXITCODE -eq 0) {
+        $id = ($out | ConvertFrom-Json).id
+        Write-Host "    added key id $id, write access"
+    } else {
+        # Re-read rather than trust the exit code: GitHub rejects a key that is
+        # already on the repo, and that is a success for our purposes.
+        $now = gh api "repos/$Repo/keys" --jq '.[].key'
+        if ($now -and ($now | Where-Object { $_.StartsWith($body) })) {
+            Write-Host "    already present on the repo"
+        } else {
+            Write-Error "could not register the deploy key: $out"
+        }
+    }
 }
 
 Write-Host ""

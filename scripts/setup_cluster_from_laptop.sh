@@ -56,11 +56,19 @@ keybody="$(printf '%s' "$pubkey" | cut -d' ' -f1,2)"
 if printf '%s\n' "$existing" | grep -qF "$keybody"; then
     echo "    already registered"
 else
-    gh api "repos/$REPO/keys" \
-        -f "title=$title" \
-        -f "key=$pubkey" \
-        -F read_only=false \
-        --jq '"    added key id \(.id), write access"'
+    if key_id=$(gh api "repos/$REPO/keys" \
+            -f "title=$title" -f "key=$pubkey" -F read_only=false --jq .id); then
+        echo "    added key id $key_id, write access"
+    else
+        # GitHub rejects a key that is already on the repo, and for us that is a
+        # success. Re-read rather than trust the exit code.
+        if gh api "repos/$REPO/keys" --jq '.[].key' | grep -qF "$keybody"; then
+            echo "    already present on the repo"
+        else
+            echo "    could not register the deploy key" >&2
+            exit 1
+        fi
+    fi
 fi
 
 echo
