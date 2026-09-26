@@ -52,7 +52,16 @@ export NUMEXPR_NUM_THREADS=1
 
 # cmdstanpy writes its scratch files next to the model by default, which on a
 # shared filesystem means 128 array tasks stepping on each other.
-export TMPDIR="${TMPDIR:-/tmp}/scenport-${SLURM_JOB_ID:-local}-${SLURM_ARRAY_TASK_ID:-0}"
+#
+# Do not trust an inherited TMPDIR. A login profile here points it at a directory
+# that does not exist, and SLURM only silently repairs that for the job it starts,
+# not for anything the job then runs.
+scratch_base="${TMPDIR:-/tmp}"
+if [ ! -d "$scratch_base" ] || [ ! -w "$scratch_base" ]; then
+    echo "TMPDIR '$scratch_base' is missing or not writable; using /tmp" >&2
+    scratch_base=/tmp
+fi
+export TMPDIR="$scratch_base/scenport-${SLURM_JOB_ID:-local}-${SLURM_ARRAY_TASK_ID:-0}"
 mkdir -p "$TMPDIR"
 trap 'rm -rf "$TMPDIR"' EXIT
 
