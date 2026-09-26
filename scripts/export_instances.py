@@ -1,14 +1,32 @@
 #!/usr/bin/env python
 """Export the allocation instances as a standalone benchmark set.
 
-    python scripts/export_instances.py --forecaster garch --every 3
+    python scripts/export_instances.py --families generators scale constraints
 
 Each instance is the scenario matrix plus the constraint parameters, which is
 everything an optimiser needs. No forecaster, no price panel, no dependency on this
-package -- an npz and a JSON header, readable from anything.
+package: an npz and a JSON header, readable from anything.
 
-The point is that somebody comparing a new solver against ours should not have to
-rerun a Prophet sweep first.
+The set is a deliberate grid, not whatever the backtest happened to produce. Three
+families:
+
+  generators   every fitted generator, on shared dates, at the point-in-time
+               universe size. Same assets and same dates throughout, so the only
+               thing that differs between instances is the tail and dependence
+               structure the generator produced. This is the diversity that
+               existing portfolio benchmarks do not have.
+  scale        larger universes drawn from the panel by market capitalisation, with
+               scenarios resampled from realised horizon returns. This is the size
+               range, and it goes past what is already out there.
+  constraints  one base instance per family with the cardinality, the cap, the risk
+               aversion and the tail fraction moved one at a time.
+
+Why the set exists at all: the OR-Library portfolio files give per-asset means and
+standard deviations and a correlation matrix. Moments, not scenarios. Running a CVaR
+objective on them means inventing a distribution consistent with those moments, and
+that choice is usually not reported, so gaps from two papers are not comparable.
+SIPLIB's portfolio entry is chance-constrained and carries no tail risk measure,
+cardinality or semicontinuous variables.
 """
 
 from __future__ import annotations
@@ -20,19 +38,25 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scenport import config as cfgmod  # noqa: E402
 from scenport.alloc.exact import subsample  # noqa: E402
 from scenport.alloc.objective import Problem  # noqa: E402
+from scenport.data.panel import Panel  # noqa: E402
 from scenport.data.universe import read as read_universe  # noqa: E402
 from scenport.forecast.store import ScenarioStore  # noqa: E402
 
 log = logging.getLogger("export")
 
+FAMILIES = ("generators", "scale", "constraints")
+
 README = """\
 # scenport allocation instances
+
+Cardinality-constrained mean-CVaR portfolio selection over simulated scenarios.
 
 Each instance is a pair of files:
 
@@ -51,95 +75,285 @@ The problem is
 with CVaR written as a positive loss: the mean of the worst (1 - alpha) fraction of
 the S scenario returns.
 
-`best_known` in the JSON is the best objective value we have found, and `proven`
-says whether a mixed-integer solver closed it. Improvements welcome.
+`best_known` in the JSON is the best objective value we have found and `proven` says
+whether a mixed-integer solver closed it. Improvements welcome; open an issue with
+the instance name, the objective value and how you got it.
+
+## Families
+
+`family` in the header says how the scenarios were produced.
+
+- `generators`: simulated by one of the fitted forecasters named in `generator`, on
+  the point-in-time universe for `rebalance_date`. Instances sharing a date share
+  their assets and their carried-in weights, so they differ only in the scenario
+  distribution.
+- `scale`: assets drawn from the panel by market capitalisation on `rebalance_date`,
+  with scenarios resampled in blocks from realised horizon returns. Use these for
+  solver scaling. They are not forecasts and should not be read as any.
+- `constraints`: a base instance with one constraint parameter moved. `varied` names
+  which one.
+
+## Reading one
+
+    import json, numpy as np
+    head = json.load(open("name.json"))
+    data = np.load("name.npz")
+    R, w_prev = data["scenarios"], data["w_prev"]
+
+## Why this set exists
+
+The OR-Library portfolio files, which is what this problem class has been
+benchmarked on since 2000, give per-asset means and standard deviations and a
+correlation matrix. Moments, not scenarios. A CVaR objective cannot be evaluated on
+moments, so anyone using them for this problem has to invent a distribution
+consistent with them, and that choice is usually not reported. Two papers quoting
+optimality gaps on port1 are therefore not necessarily quoting them on the same
+instance.
+
+SIPLIB does not fill the gap either. Its portfolio entry, PROBPORT, is
+chance-constrained, and nothing in the collection carries a tail risk measure with
+cardinality and semicontinuous variables.
+
+These instances ship the scenario matrix itself, so the objective is unambiguous and
+gaps are comparable.
 """
+
+
+def _write(out: Path, name: str, instance: Problem, header: dict) -> None:
+    np.savez_compressed(
+        out / f"{name}.npz",
+        scenarios=instance.scenarios.astype(np.float32),
+        w_prev=instance.w_prev.astype(np.float32),
+    )
+    full = {
+        "name": name,
+        "n_assets": instance.n,
+        "n_scenarios": instance.n_scenarios,
+        "assets": list(instance.assets),
+        "w_max": instance.w_max,
+        "w_min": instance.w_min,
+        "cardinality": instance.cardinality,
+        "cvar_alpha": instance.cvar_alpha,
+        "gamma": instance.gamma,
+        "cost_rate": instance.cost_rate,
+        "objective": instance.objective,
+    }
+    full.update(header)
+    full.setdefault("best_known", None)
+    full.setdefault("proven", False)
+    (out / f"{name}.json").write_text(json.dumps(full, indent=2), encoding="utf-8")
+
+
+def _base_kwargs(cfg) -> dict:
+    return {
+        "w_max": cfg["alloc.w_max"],
+        "w_min": cfg["alloc.w_min"],
+        "cardinality": cfg["alloc.cardinality"],
+        "cvar_alpha": cfg["alloc.cvar_alpha"],
+        "gamma": cfg["alloc.gamma"],
+        "cost_rate": cfg["backtest.cost_bps"] / 10_000.0,
+    }
+
+
+def _known_bounds(runs_dir: Path) -> dict:
+    """Whatever the gap study already closed, so the headers can carry a bound."""
+    solved = {}
+    path = runs_dir / "exact" / "gaps.parquet"
+    if not path.exists():
+        return solved
+    gaps = pd.read_parquet(path)
+    best = gaps.groupby(["rebalance", "allocator"])["objective"].max().unstack()
+    for date, row in best.iterrows():
+        solved[pd.Timestamp(date)] = {
+            "best_known": float(row.max()),
+            "proven": bool("milp" in row.index and row.idxmax() == "milp"),
+        }
+    return solved
+
+
+def family_generators(args, cfg, out, panel_dir, runs_dir, bounds) -> int:
+    """Every generator on the same dates and the same assets."""
+    universe = read_universe(panel_dir / "universe.parquet")
+    dates = list(universe.dates[:: args.every])[: args.n_dates]
+    base = _base_kwargs(cfg)
+    written = 0
+
+    for forecaster in args.generators:
+        store = ScenarioStore(runs_dir / "scenarios", forecaster, args.forecast_seed)
+        for date in dates:
+            if not store.exists(date):
+                continue
+            assets = universe.at(date)
+            terminal = store.load(date).reorder(assets).terminal()
+            for n_scenarios in args.scenario_counts:
+                instance = subsample(
+                    Problem(scenarios=terminal, assets=list(assets), **base),
+                    n_scenarios,
+                    np.random.default_rng(cfgmod.stable_seed("export", forecaster, str(date))),
+                )
+                name = (
+                    f"gen_{forecaster}_{date.date()}"
+                    f"_n{instance.n}_S{instance.n_scenarios}"
+                )
+                _write(out, name, instance, {
+                    "family": "generators",
+                    "generator": forecaster,
+                    "rebalance_date": str(date.date()),
+                    **bounds.get(pd.Timestamp(date), {}),
+                })
+                written += 1
+    return written
+
+
+def _historical_instance(panel: Panel, cfg, date, size, n_scenarios, rng, base) -> Problem | None:
+    """Larger universe with scenarios resampled from realised horizon returns.
+
+    Extra assets come off the panel by market capitalisation rather than being
+    simulated, because a synthetic block of independent assets would make the
+    problem artificially easy and the scaling numbers meaningless.
+    """
+    history = panel.price.loc[:date].iloc[-(cfg["backtest.train_days"] + 1) : -1]
+    liquid = panel.mcap.loc[date].dropna().sort_values(ascending=False)
+    assets = [a for a in liquid.index[: size * 3] if history[a].notna().sum() > 400][:size]
+    if len(assets) < size:
+        log.warning("only %d assets with enough history for a universe of %d", len(assets), size)
+        if len(assets) < 10:
+            return None
+
+    horizon = cfg["backtest.horizon_days"]
+    block = history[assets].pct_change(horizon).dropna().to_numpy()
+    if len(block) < 30:
+        return None
+    idx = rng.integers(0, len(block), size=n_scenarios)
+    return Problem(scenarios=block[idx], assets=list(assets), **base)
+
+
+def family_scale(args, cfg, out, panel_dir) -> int:
+    panel = Panel.read(panel_dir)
+    date = pd.Timestamp(args.scale_date) if args.scale_date else panel.dates[-400]
+    base = _base_kwargs(cfg)
+    written = 0
+
+    for size in args.sizes:
+        for n_scenarios in args.scenario_counts:
+            rng = np.random.default_rng(cfgmod.stable_seed("scale", size, n_scenarios))
+            instance = _historical_instance(panel, cfg, date, size, n_scenarios, rng, base)
+            if instance is None:
+                continue
+            # The cardinality has to grow with the universe or every large instance
+            # is the same tiny selection problem wearing a bigger hat.
+            instance.cardinality = max(cfg["alloc.cardinality"], int(round(size * 0.2)))
+            instance.w_max = max(cfg["alloc.w_max"], 1.5 / instance.cardinality)
+            name = f"scale_{date.date()}_n{instance.n}_S{instance.n_scenarios}"
+            _write(out, name, instance, {
+                "family": "scale",
+                "generator": "historical_bootstrap",
+                "rebalance_date": str(date.date()),
+            })
+            written += 1
+    return written
+
+
+def family_constraints(args, cfg, out, panel_dir, runs_dir) -> int:
+    """One base instance with each constraint parameter moved on its own."""
+    universe = read_universe(panel_dir / "universe.parquet")
+    store = ScenarioStore(runs_dir / "scenarios", args.generators[0], args.forecast_seed)
+    date = next((d for d in universe.dates[:: args.every] if store.exists(d)), None)
+    if date is None:
+        log.warning("no stored scenarios for the constraint family")
+        return 0
+
+    assets = universe.at(date)
+    terminal = store.load(date).reorder(assets).terminal()
+    base = _base_kwargs(cfg)
+    written = 0
+
+    variations = (
+        [("cardinality", k) for k in args.cardinalities]
+        + [("w_max", w) for w in args.caps]
+        + [("gamma", g) for g in args.gammas]
+        + [("cvar_alpha", a) for a in args.alphas]
+    )
+
+    for key, value in variations:
+        kwargs = dict(base)
+        kwargs[key] = value
+        if key == "cardinality":
+            # w_max has to admit a feasible fully invested portfolio at this K.
+            kwargs["w_max"] = max(base["w_max"], 1.05 / value)
+        try:
+            problem = Problem(scenarios=terminal, assets=list(assets), **kwargs)
+        except ValueError as exc:
+            log.warning("skipping %s=%s: %s", key, value, exc)
+            continue
+        instance = subsample(
+            problem,
+            args.scenario_counts[-1],
+            np.random.default_rng(cfgmod.stable_seed("constraints", key, value)),
+        )
+        tag = str(value).replace(".", "p")
+        name = f"cons_{key}_{tag}_n{instance.n}_S{instance.n_scenarios}"
+        _write(out, name, instance, {
+            "family": "constraints",
+            "generator": args.generators[0],
+            "rebalance_date": str(date.date()),
+            "varied": key,
+        })
+        written += 1
+    return written
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/base.yaml")
     parser.add_argument("--set", dest="overrides", action="append", default=[])
-    parser.add_argument("--forecaster", default="garch")
+    parser.add_argument("--families", nargs="+", default=list(FAMILIES), choices=FAMILIES)
+    parser.add_argument("--generators", nargs="+", default=[
+        "rw", "arima", "ets", "garch", "prophet", "prophet_rmse", "lgbm",
+        "lstm", "deepar", "transformer",
+    ])
     parser.add_argument("--forecast-seed", type=int, default=0)
-    parser.add_argument("--every", type=int, default=3)
-    parser.add_argument("--max-scenarios", type=int, default=400)
+    parser.add_argument("--every", type=int, default=6)
+    parser.add_argument("--n-dates", type=int, default=4)
+    parser.add_argument("--scenario-counts", type=int, nargs="+", default=[250, 1000])
+    parser.add_argument("--sizes", type=int, nargs="+",
+                        default=[30, 50, 75, 100, 150, 225])
+    parser.add_argument("--scale-date", default=None)
+    parser.add_argument("--cardinalities", type=int, nargs="+", default=[5, 12, 20])
+    parser.add_argument("--caps", type=float, nargs="+", default=[0.10, 0.33, 1.0])
+    parser.add_argument("--gammas", type=float, nargs="+", default=[0.0, 0.25, 1.0])
+    parser.add_argument("--alphas", type=float, nargs="+", default=[0.90, 0.99])
     parser.add_argument("--out", default="artifacts/instances")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     root = cfgmod.repo_root()
     cfg = cfgmod.load(args.config, args.overrides)
-
     panel_dir = cfg.resolve("paths.panel", root)
     runs_dir = cfg.resolve("paths.runs", root)
-    universe = read_universe(panel_dir / "universe.parquet")
-    store = ScenarioStore(runs_dir / "scenarios", args.forecaster, args.forecast_seed)
 
     out = (root / args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     (out / "README.md").write_text(README, encoding="utf-8")
 
-    # Whatever the gap study already solved, so the headers can carry a bound.
-    solved = {}
-    gaps_path = runs_dir / "exact" / "gaps.parquet"
-    if gaps_path.exists():
-        import pandas as pd
+    bounds = _known_bounds(runs_dir)
+    counts = {}
+    if "generators" in args.families:
+        counts["generators"] = family_generators(args, cfg, out, panel_dir, runs_dir, bounds)
+    if "scale" in args.families:
+        counts["scale"] = family_scale(args, cfg, out, panel_dir)
+    if "constraints" in args.families:
+        counts["constraints"] = family_constraints(args, cfg, out, panel_dir, runs_dir)
 
-        gaps = pd.read_parquet(gaps_path)
-        best = gaps.groupby(["rebalance", "allocator"])["objective"].max().unstack()
-        for date, row in best.iterrows():
-            solved[date] = {
-                "best_known": float(row.max()),
-                "proven": bool("milp" in row.index and row.idxmax() == "milp"),
-            }
+    total = sum(counts.values())
+    for family, n in counts.items():
+        log.info("%-12s %3d instances", family, n)
+    log.info("wrote %d instances to %s", total, out)
 
-    written = 0
-    for date in universe.dates[:: args.every]:
-        if not store.exists(date):
-            continue
-        assets = universe.at(date)
-        scenarios = store.load(date).reorder(assets)
-        instance = subsample(
-            Problem(
-                scenarios=scenarios.terminal(),
-                assets=list(assets),
-                w_max=cfg["alloc.w_max"],
-                w_min=cfg["alloc.w_min"],
-                cardinality=cfg["alloc.cardinality"],
-                cvar_alpha=cfg["alloc.cvar_alpha"],
-                gamma=cfg["alloc.gamma"],
-                cost_rate=cfg["backtest.cost_bps"] / 10_000.0,
-            ),
-            args.max_scenarios,
-            np.random.default_rng(0),
-        )
-
-        name = f"{args.forecaster}_{date.date()}_n{instance.n}_S{instance.n_scenarios}"
-        np.savez_compressed(
-            out / f"{name}.npz",
-            scenarios=instance.scenarios.astype(np.float32),
-            w_prev=instance.w_prev.astype(np.float32),
-        )
-        header = {
-            "name": name,
-            "n_assets": instance.n,
-            "n_scenarios": instance.n_scenarios,
-            "assets": instance.assets,
-            "w_max": instance.w_max,
-            "w_min": instance.w_min,
-            "cardinality": instance.cardinality,
-            "cvar_alpha": instance.cvar_alpha,
-            "gamma": instance.gamma,
-            "cost_rate": instance.cost_rate,
-            "rebalance_date": str(date.date()),
-            "forecaster": args.forecaster,
-        }
-        header.update(solved.get(date, {"best_known": None, "proven": False}))
-        (out / f"{name}.json").write_text(json.dumps(header, indent=2), encoding="utf-8")
-        written += 1
-
-    log.info("wrote %d instances to %s", written, out)
+    manifest = []
+    for path in sorted(out.glob("*.json")):
+        manifest.append(json.loads(path.read_text(encoding="utf-8")))
+    (out / "index.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return 0
 
 
