@@ -45,7 +45,9 @@ VARIANTS=(
   "card05|alloc.cardinality=5"
   "card10|alloc.cardinality=10"
   "card15|alloc.cardinality=15"
-  "wmax10|alloc.w_max=0.10"
+  # A 10% cap needs at least ten positions to be fully invested, so the
+  # cardinality has to come up with it or the problem has no feasible point.
+  "wmax10|alloc.w_max=0.10|alloc.cardinality=12"
   "wmax33|alloc.w_max=0.33"
   "wmax100|alloc.w_max=1.0|alloc.w_min=0.0"
   "cost00|backtest.cost_bps=0"

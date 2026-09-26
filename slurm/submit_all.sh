@@ -52,7 +52,11 @@ echo "ablations       : $abl"
 exact=$(sbatch --parsable --dependency="afterok:${fc_cpu}" slurm/40_exact.sh)
 echo "exact           : $exact"
 
-agg=$(sbatch --parsable --dependency="afterok:${bt}:${bt_ea}:${abl}:${exact}" slurm/50_aggregate.sh)
+# The ablations are sensitivity checks, not headline results, so they wait with
+# afterany: one infeasible variant should not throw away a completed backtest by
+# cancelling the aggregation. The jobs the tables are actually built from stay on
+# afterok.
+agg=$(sbatch --parsable     --dependency="afterok:${bt}:${bt_ea}:${exact},afterany:${abl}"     slurm/50_aggregate.sh)
 echo "aggregate       : $agg"
 
 pub=$(sbatch --parsable --dependency="afterok:${agg}" slurm/60_publish.sh)
