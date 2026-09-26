@@ -18,6 +18,16 @@ fi
 git pull --rebase --autostash
 echo "at $(git log -1 --oneline)"
 
+for queue in short medium long; do
+    if ! sinfo -h -p "$queue" -o %P >/dev/null 2>&1 || [ -z "$(sinfo -h -p "$queue" -o %P)" ]; then
+        echo "queue '$queue' does not exist on this cluster." >&2
+        echo "Available:" >&2
+        sinfo -h -o '  %P  maxtime %l  nodes %D' >&2
+        echo "Fix the --partition lines in slurm/*.sh before submitting." >&2
+        exit 1
+    fi
+done
+
 if [ ! -f data/panel/price.parquet ]; then
     echo "data/panel/price.parquet is missing." >&2
     echo "Run scripts/fetch_data.py somewhere with network access and commit the panel." >&2

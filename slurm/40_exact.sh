@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=scen_exact
-#SBATCH --partition=cpu
+#SBATCH --partition=long
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
-#SBATCH --time=2-00:00:00
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=128G
+#SBATCH --time=3-00:00:00
 #SBATCH --array=0-1
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
@@ -13,12 +13,16 @@
 # Branch and bound. Task 0 measures the optimality gap on the real rebalancing
 # dates; task 1 grows the universe until the solver stops finishing.
 #
-# The two-day wall clock is the cpu partition maximum and is deliberate: the point
-# of the scaling run is to find where the MILP stops being usable, so a task that
-# times out at n=150 is a result, not a failure. Per-instance time is capped so one
-# hard instance cannot eat the whole allocation.
+# This is the only job that needs the long queue. Three days of wall clock is
+# deliberate: the point of the scaling run is to find where the MILP stops being
+# usable, so a task that times out at n=200 is a result, not a failure. Per-instance
+# time is capped so one hard instance cannot eat the whole allocation.
 
 source "$(dirname "$0")/env.sh"
+
+# HiGHS gets the whole allocation for its own parallel branch and bound. This is
+# the one job where env.sh's one-thread-per-library rule is wrong.
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-24}"
 
 case ${SLURM_ARRAY_TASK_ID:-0} in
   0)
@@ -33,8 +37,8 @@ case ${SLURM_ARRAY_TASK_ID:-0} in
   1)
     python scripts/run_exact.py scaling \
         --config configs/base.yaml \
-        --sizes 10 15 20 30 50 75 100 150 \
+        --sizes 10 15 20 30 50 75 100 150 200 \
         --max-scenarios 400 \
-        --time-limit 1800
+        --time-limit 3600
     ;;
 esac

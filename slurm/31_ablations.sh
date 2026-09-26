@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=scen_abl
-#SBATCH --partition=cpu
+#SBATCH --partition=medium
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

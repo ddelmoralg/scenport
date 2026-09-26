@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=scen_fc_cpu
-#SBATCH --partition=cpu
+#SBATCH --partition=medium
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=24G
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-127%24
+#SBATCH --array=0-127%20
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 
@@ -21,6 +21,9 @@
 # per asset per date. The eight worker processes are used to run several dates in
 # parallel inside a task, which is much more effective than trying to parallelise a
 # single Stan fit.
+#
+# Twenty tasks at a time is 160 of the node's 224 cores, which leaves the GPU job
+# its 24 and still keeps something free for everyone else.
 #
 #   sbatch slurm/10_forecast_cpu.sh
 

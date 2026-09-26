@@ -98,8 +98,9 @@ git pull
 bash slurm/submit_all.sh
 ```
 
-`submit_all.sh` refuses to run on a dirty tree, pulls, submits the six jobs with
-the right dependencies, and prints the ids. The last job commits `artifacts/` and
+`submit_all.sh` refuses to run on a dirty tree, pulls, checks the queues it is
+about to use still exist, submits the seven jobs with the right dependencies, and
+prints the ids. The last job commits `artifacts/` and
 pushes; if the laptop pushed in the meantime it rebases and retries.
 
 **Back on the laptop:** `git pull`, and the tables and figures are in `artifacts/`.
@@ -133,14 +134,25 @@ aggregation finishes.
 
 ## Jobs
 
-| job | partition | shape | roughly |
+The queue names below are the ones on our cluster: `short` caps at 4 hours,
+`medium` at a day, `long` at a week. Rename them in the job headers if yours
+differ.
+
+| job | queue | shape | roughly |
 |---|---|---|---|
-| `10_forecast_cpu` | `cpu` | 8 forecasters x 16 shards, 8 cores | 4-10 h |
-| `20_forecast_gpu` | `gpu-small` | 3 forecasters x 2 shards, 1 GPU | 2-5 h |
-| `30_backtest` | `cpu` | one task per forecaster | 1-3 h |
-| `31_ablations` | `cpu` | 18 sensitivity runs | 2-6 h |
-| `40_exact` | `cpu` | gaps + scaling sweep | up to 2 days |
-| `50_aggregate` | `cpu` | one task | under 1 h |
+| `10_forecast_cpu` | `medium` | 8 forecasters x 16 shards, 8 cores, 20 at a time | 4-10 h |
+| `20_forecast_gpu` | `medium` | 3 forecasters x 2 shards, 1 GPU, 3 at a time | 2-5 h |
+| `30_backtest` | `medium` | one task per forecaster | 1-3 h |
+| `31_ablations` | `medium` | 18 sensitivity runs | 2-6 h |
+| `40_exact` | `long` | gaps + scaling sweep, 24 cores | up to 3 days |
+| `50_aggregate` | `medium` | one task | under 1 h |
+
+Everything except `40_exact` fits in a day. Only the mixed-integer scaling sweep
+needs the long queue, and it is meant to run until it times out.
+
+The two forecasting jobs run at the same time and share one node, so their
+concurrency limits are set together: 20 x 8 cores plus 3 x 8 leaves headroom on a
+224-core node. Retune the `%N` on each array if your node is a different size.
 
 Edit `slurm/env.sh` first; it is the only place the environment is named.
 

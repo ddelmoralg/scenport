@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=scen_pub
-#SBATCH --partition=cpu
+#SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1

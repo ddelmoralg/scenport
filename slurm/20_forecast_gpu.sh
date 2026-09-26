@@ -1,25 +1,27 @@
 #!/bin/bash
 #SBATCH --job-name=scen_fc_gpu
-#SBATCH --partition=gpu-small
+#SBATCH --partition=medium
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --time=08:00:00
-#SBATCH --array=0-5%2
+#SBATCH --array=0-5%3
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 
 # Scenario simulation for the three neural forecasters.
 #
-# One GPU each and at most two tasks at a time, which is the per-user limit on
-# gpu-small. Three forecasters x two shards = six tasks. The models are small
-# (a two-layer encoder over 64 steps), so a single GPU is plenty and asking for
-# more would only lengthen the queue for everyone.
+# Three forecasters x two shards = six tasks, one H100 each, three at a time. The
+# node has eight cards and no per-user cap right now, but the models are small (a
+# two-layer encoder over 64 steps) so taking more would only starve other people
+# for no gain here.
 #
-# Depends on the panel from 00_fetch.sh. Independent of 10_forecast_cpu.sh, so the
-# two can run at the same time.
+# Runs alongside 10_forecast_cpu.sh on the same node: 3 x 8 = 24 cores here plus
+# 20 x 8 = 160 there leaves room on the 224 the node has.
+#
+# Depends on the panel from 00_fetch.sh. Independent of 10_forecast_cpu.sh.
 #
 #   sbatch slurm/20_forecast_gpu.sh
 
