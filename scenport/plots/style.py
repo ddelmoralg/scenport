@@ -1,8 +1,12 @@
 """Figure style.
 
 Okabe-Ito palette in a fixed order, assigned by series name rather than by plotting
-order, plus a distinct line style and marker per series so nothing depends on colour
-alone in greyscale print.
+order, plus a line style and a marker per series so nothing depends on colour alone
+in greyscale print.
+
+The three channels cycle at coprime periods (6 colours, 5 line styles, 7 markers).
+That matters: with all three on the same period they move together and two series
+fifteen apart come out identical. `tests/test_plot_style.py` pins it.
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # Okabe-Ito, reordered so that no two adjacent entries are the deutan-confusable
-# green/purple pair.
+# green/purple pair. Yellow is left out; it does not hold up as a line on white.
 PALETTE = (
     "#0072B2",   # blue
     "#D55E00",   # vermillion
@@ -24,8 +28,15 @@ GRID = "#D9D9D9"
 INK = "#1A1A1A"
 MUTED = "#666666"
 
-LINESTYLES = ("-", "--", "-.", ":", (0, (5, 1)), (0, (3, 1, 1, 1)))
-MARKERS = ("o", "s", "^", "D", "v", "P")
+# Lengths are 5 and 7 against the palette's 6 on purpose. See the module docstring.
+LINESTYLES = ("-", "--", "-.", ":", (0, (3, 1, 1, 1)))
+MARKERS = ("o", "s", "^", "D", "v", "P", "X")
+
+# Elsevier column widths in inches. A figure drawn at the width it will be printed
+# at needs no scaling in LaTeX, which is what keeps the type in the figure the same
+# size as the type around it.
+ONE_COL = 3.35
+TWO_COL = 6.85
 
 #: Fixed assignment so a strategy keeps its identity across every figure.
 FORECASTER_ORDER = (
@@ -37,6 +48,15 @@ ALLOCATOR_ORDER = (
     "minvar", "maxsharpe", "riskparity", "hrp", "cvar_lp",
     "ga", "de", "pso", "cmaes", "milp",
 )
+
+#: Drawn achromatic: these are the backdrop, not another contender. Each still gets
+#: its own dash pattern, because figures that plot two of them at once would
+#: otherwise show two identical grey lines and an ambiguous legend.
+BACKDROP = {
+    "equal": (0, (6, 2)),
+    "mcap": (0, (1, 1.6)),
+    "single": (0, (6, 2, 1, 2)),
+}
 
 PRETTY = {
     "rw": "Historical sim.",
@@ -82,12 +102,15 @@ def label(name: str) -> str:
 def style_for(name: str, order: tuple[str, ...]) -> dict:
     """Colour, line style and marker for one named series.
 
-    Benchmarks that are not really competitors -- 1/N, the cap-weighted index --
-    come back grey and dashed so they read as the backdrop rather than as another
-    contender.
+    Benchmarks that are not really competitors come back grey and dashed.
     """
-    if name in ("equal", "mcap", "single"):
-        return {"color": REFERENCE, "linestyle": "--", "marker": "", "linewidth": 1.4}
+    if name in BACKDROP:
+        return {
+            "color": REFERENCE,
+            "linestyle": BACKDROP[name],
+            "marker": "",
+            "linewidth": 1.4,
+        }
     idx = order.index(name) if name in order else len(order)
     return {
         "color": PALETTE[idx % len(PALETTE)],
@@ -108,14 +131,22 @@ def use_paper_style() -> None:
 
     plt.rcParams.update(
         {
-            "figure.figsize": (6.5, 3.6),          # fits a single column with room to spare
+            "figure.figsize": (TWO_COL, 3.6),
             "figure.dpi": 150,
             "savefig.dpi": 300,
             "savefig.bbox": "tight",
             "savefig.pad_inches": 0.02,
+            # Type 42 embeds the font as TrueType instead of writing a Type 3
+            # subset. Elsevier rejects Type 3, and it is also what keeps the text
+            # selectable and searchable in the submitted PDF.
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            # STIXGeneral ships with matplotlib, so the laptop and the cluster draw
+            # the same glyphs. It is Times-metric compatible, which is close enough
+            # to what the journal sets the body text in.
             "font.family": "serif",
-            "font.serif": ["DejaVu Serif", "Times New Roman", "Nimbus Roman"],
-            "mathtext.fontset": "dejavuserif",
+            "font.serif": ["STIXGeneral", "Times New Roman", "DejaVu Serif"],
+            "mathtext.fontset": "stix",
             "font.size": 9,
             "axes.titlesize": 9,
             "axes.labelsize": 9,
@@ -141,6 +172,19 @@ def use_paper_style() -> None:
             "text.color": INK,
         }
     )
+
+
+def as_percent(ax, axis: str = "y", decimals: int = 0) -> None:
+    """Label an axis that holds fractions as percentages.
+
+    Returns, drawdowns and turnover are all carried around as fractions. Readers
+    want to see 12%, not 0.12.
+    """
+    from matplotlib.ticker import PercentFormatter
+
+    fmt = PercentFormatter(xmax=1.0, decimals=decimals)
+    target = ax.yaxis if axis == "y" else ax.xaxis
+    target.set_major_formatter(fmt)
 
 
 def save(fig, directory: Path, name: str) -> Path:

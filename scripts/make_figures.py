@@ -49,7 +49,7 @@ def fig_nav(runs: Path, artifacts: Path, cfg, headline: str, allocator: str):
 
     daily = _daily(runs)
     fig, (top, bottom) = plt.subplots(
-        2, 1, figsize=(6.5, 5.0), sharex=True, height_ratios=[2.2, 1.0]
+        2, 1, figsize=(style.TWO_COL, 5.0), sharex=True, height_ratios=[2.2, 1.0]
     )
 
     tracks = [
@@ -104,7 +104,7 @@ def fig_transmission(artifacts: Path):
 
     panels = [("mase", "Point accuracy (MASE, lower is better)"),
               ("crps", "Distributional accuracy (CRPS, lower is better)")]
-    fig, axes = plt.subplots(1, 2, figsize=(6.5, 3.2), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(style.TWO_COL, 3.2), sharey=True)
 
     for ax, (column, xlabel) in zip(axes, panels, strict=True):
         if column not in merged:
@@ -149,7 +149,9 @@ def fig_calibration(runs: Path, artifacts: Path):
     names = [f for f in style.FORECASTER_ORDER if f in set(scores["forecaster"])]
     cols = 4
     rows = int(np.ceil(len(names) / cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(6.5, 1.5 * rows), sharex=True, sharey=True)
+    fig, axes = plt.subplots(
+        rows, cols, figsize=(style.TWO_COL, 1.5 * rows), sharex=True, sharey=True
+    )
     axes = np.atleast_1d(axes).ravel()
 
     bins = np.linspace(0, 1, 11)
@@ -181,7 +183,7 @@ def fig_scaling(runs: Path, artifacts: Path):
         return None
     frame = pd.read_parquet(path)
 
-    fig, ax = plt.subplots(figsize=(6.5, 3.2))
+    fig, ax = plt.subplots(figsize=(style.TWO_COL, 3.2))
     for name, group in frame.groupby("allocator"):
         group = group.sort_values("n_assets")
         spec = style.style_for(name, style.ALLOCATOR_ORDER)
@@ -216,7 +218,7 @@ def fig_convergence(runs: Path, artifacts: Path):
         log.warning("no convergence traces recorded; skipping")
         return None
 
-    fig, ax = plt.subplots(figsize=(6.5, 3.0))
+    fig, ax = plt.subplots(figsize=(style.TWO_COL, 3.0))
     for name, runs_list in curves.items():
         values = np.concatenate(runs_list)
         spec = style.style_for(name, style.ALLOCATOR_ORDER)
@@ -242,7 +244,7 @@ def fig_regimes(artifacts: Path):
     pivot = keep.pivot_table(index="regime", columns="allocator", values="sharpe", aggfunc="mean")
     pivot = pivot.reindex(["bull", "sideways", "bear"]).dropna(how="all")
 
-    fig, ax = plt.subplots(figsize=(6.5, 3.0))
+    fig, ax = plt.subplots(figsize=(style.TWO_COL, 3.0))
     width = 0.8 / max(len(pivot.columns), 1)
     positions = np.arange(len(pivot))
     for i, column in enumerate(pivot.columns):

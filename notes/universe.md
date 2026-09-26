@@ -54,7 +54,7 @@ diversified.
 Both are excluded by name in `configs/base.yaml`. The name list is a maintenance
 liability, so there is a backstop: an asset whose median rolling coefficient of
 variation over a 180-day window is below 2 % is treated as pegged and dropped. The
-rolling form matters — a token that was pegged for part of its life and then broke
+rolling form matters, because a token that was pegged for part of its life and then broke
 still gets caught, where a single global statistic would be rescued by the break.
 
 Wrapped tokens are not detected automatically. A ratio test against the underlying

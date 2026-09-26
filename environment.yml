@@ -26,5 +26,6 @@ dependencies:
       - highspy>=1.7
       - ruff>=0.4
       # torch is installed separately so the CUDA build matches the cluster
-      # driver. On the Atos nodes:
-      #   pip install torch --index-url https://download.pytorch.org/whl/cu121
+      # driver. Check it on a compute node, not the login node:
+      #   nvidia-smi
+      #   pip install torch --index-url https://download.pytorch.org/whl/cu124

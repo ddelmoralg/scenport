@@ -72,15 +72,15 @@ Search happens in unconstrained `R^n`. A real vector becomes a portfolio like th
    a weight. A gene crossing zero adds or removes a position, so the population
    explores different supports without a separate binary chromosome.
 2. **trim and pad.** If more than `K` genes are positive, keep the `K` largest. If
-   fewer than `ceil(1 / w_max)` are positive — too few to add up to one under the cap —
+   fewer than `ceil(1 / w_max)` are positive, too few to add up to one under the cap,
    take that many largest instead.
 3. **project.** The proposal is projected onto `{w : sum(w) = 1, w_min <= w_i <= w_max}`
    over the chosen support. The Euclidean projection has the closed form
    `clip(v + lam, w_min, w_max)` for a scalar `lam`, and the sum is monotone in `lam`,
    so a bisection finds it exactly.
 
-Every candidate is therefore feasible by construction. The alternative — a penalty
-term on the cap — sounds equivalent and is not. A hard rejection turns the constraint
+Every candidate is therefore feasible by construction. The alternative, a penalty
+term on the cap, sounds equivalent and is not. A hard rejection turns the constraint
 boundary into a cliff and throws away most of the population's gradient information; a
 soft penalty leaves the search wandering in infeasible territory and needs its weight
 tuned. Repairing avoids both, and it makes the reported evaluation budget mean

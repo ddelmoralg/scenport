@@ -7,7 +7,7 @@ Two things. A mean-CVaR allocator that optimises directly over simulated scenari
 under a cardinality limit and a minimum position size, validated against the exact
 mixed-integer optimum wherever branch and bound can close it. And, on top of that,
 a benchmark that asks which property of a forecast actually shows up in the
-portfolio built from it — forecasting papers report accuracy, a risk-aware
+portfolio built from it. Forecasting papers report accuracy, a risk-aware
 objective consumes calibration, and they are not the same thing.
 
 The second question needs eleven forecasters and fifteen allocators to be
@@ -60,11 +60,12 @@ conda activate scenport
 pip install -e ".[dev]"
 ```
 
-torch is deliberately not in `environment.yml` — install the build that matches the
-cluster driver:
+torch is deliberately not in `environment.yml`. Install the build that matches the
+cluster driver, which you read off a compute node rather than the login node:
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu121
+nvidia-smi                 # on a compute node, to read the driver version
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ## The loop
@@ -201,16 +202,16 @@ coefficient-of-variation test as a backstop for pegs the list misses.
 ## Instance library
 
 `scripts/export_instances.py` dumps the allocation problems as an npz plus a JSON
-header — scenario matrix, previous weights, constraint parameters, and the best
+header: scenario matrix, previous weights, constraint parameters, and the best
 objective we know of with a flag for whether a solver proved it. No dependency on
 this package. Anyone benchmarking a different solver should not have to run a
 Prophet sweep first.
 
 ## Notes
 
-- [`notes/universe.md`](notes/universe.md) — why the universe is rebuilt at every
+- [`notes/universe.md`](notes/universe.md), why the universe is rebuilt at every
   date.
-- [`notes/objective.md`](notes/objective.md) — the mean-CVaR formulation, the
+- [`notes/objective.md`](notes/objective.md), the mean-CVaR formulation, the
   decoder, and why the discrete constraints are what justify a metaheuristic.
 
 ## Troubleshooting
