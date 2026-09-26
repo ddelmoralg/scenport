@@ -7,6 +7,7 @@ diagnostics will show which ones suffer for it.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import warnings
 
@@ -32,6 +33,25 @@ def _as_paths(raw, horizon: int, n_paths: int) -> np.ndarray:
     if arr.shape == (n_paths, horizon):
         return arr
     raise ValueError(f"cannot interpret simulate() output of shape {np.asarray(raw).shape}")
+
+
+def _seed_kwargs(simulate, rng: np.random.Generator) -> dict:
+    """However this statsmodels wants its simulate() draw seeded.
+
+    0.14 took ``random_state`` and a legacy RandomState; 0.15 replaced it with
+    ``rng`` and a Generator. Passing the wrong one raises, and passing neither
+    would fall back to the global state, which looks fine until two array tasks
+    started in the same second produce the same scenarios.
+    """
+    params = inspect.signature(simulate).parameters
+    if "rng" in params:
+        return {"rng": rng}
+    if "random_state" in params:
+        return {"random_state": np.random.RandomState(rng.integers(0, 2**31 - 1))}
+    raise TypeError(
+        "statsmodels simulate() takes neither 'rng' nor 'random_state'; "
+        "seeding it is required, so check what this version expects"
+    )
 
 
 def _log_returns(history) -> np.ndarray:
@@ -80,7 +100,7 @@ class Arima(ScenarioForecaster):
                 nsimulations=horizon,
                 anchor="end",
                 repetitions=n_paths,
-                random_state=np.random.RandomState(rng.integers(0, 2**31 - 1)),
+                **_seed_kwargs(fitted.simulate, rng),
             )
         sim = _as_paths(raw, horizon, n_paths)
         return np.exp(np.cumsum(sim, axis=1)) - 1.0
@@ -110,7 +130,7 @@ class Ets(ScenarioForecaster):
                 nsimulations=horizon,
                 anchor="end",
                 repetitions=n_paths,
-                random_state=np.random.RandomState(rng.integers(0, 2**31 - 1)),
+                **_seed_kwargs(fitted.simulate, rng),
             )
         sim = _as_paths(raw, horizon, n_paths)
         return np.exp(sim - logp[-1]) - 1.0

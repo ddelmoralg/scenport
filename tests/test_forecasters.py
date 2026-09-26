@@ -153,3 +153,50 @@ def test_prophet_tuning_picks_a_grid_point(history, rng):
     )
     chosen = model._select(history.iloc[:, 0].dropna(), HORIZON, rng)
     assert chosen["changepoint_prior_scale"] in (0.001, 0.50)
+
+
+# ---------------------------------------------------------------------------
+# statsmodels moved the simulate() seeding keyword in 0.15
+
+
+def test_seed_kwargs_matches_what_the_installed_statsmodels_takes():
+    """Both spellings have to work, because the cluster and the laptop differ.
+
+    0.14 takes `random_state` and a legacy RandomState, 0.15 takes `rng` and a
+    Generator. This was found by running the suite on the cluster: six tests
+    failed there and none here.
+    """
+    import inspect
+
+    import numpy as np
+
+    from scenport.forecast.classical import _seed_kwargs
+
+    rng = np.random.default_rng(0)
+
+    def new_style(nsimulations, anchor=None, repetitions=1, random_errors=None, rng=None):
+        pass
+
+    def old_style(nsimulations, anchor=None, repetitions=1, random_state=None):
+        pass
+
+    assert set(_seed_kwargs(new_style, rng)) == {"rng"}
+    assert set(_seed_kwargs(old_style, rng)) == {"random_state"}
+
+    for fn in (new_style, old_style):
+        kwargs = _seed_kwargs(fn, rng)
+        inspect.signature(fn).bind(nsimulations=1, **kwargs)
+
+
+def test_unseedable_simulate_is_refused():
+    """Falling back to the global state would make two array tasks agree by accident."""
+    import numpy as np
+    import pytest as _pytest
+
+    from scenport.forecast.classical import _seed_kwargs
+
+    def unseedable(nsimulations, anchor=None, repetitions=1):
+        pass
+
+    with _pytest.raises(TypeError, match="neither"):
+        _seed_kwargs(unseedable, np.random.default_rng(0))
