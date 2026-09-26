@@ -1,9 +1,9 @@
 {
-  "noise_floor_l1": 0.11426390493635932,
-  "mean_displacement": 0.7303513950158199,
-  "mean_displacement_over_noise": 6.391794464075057,
-  "displacement_spread": 0.2055664095894407,
-  "sharpe_spread": 0.13575884413168884,
-  "n_generators": 28,
+  "noise_floor_l1": 0.1181840186024178,
+  "mean_displacement": 0.7970573267822508,
+  "mean_displacement_over_noise": 6.744205656634733,
+  "displacement_spread": 0.1322618802280657,
+  "sharpe_spread": 0.1343786945277748,
+  "n_generators": 11,
   "reading": "decision moves and performance follows"
 }
