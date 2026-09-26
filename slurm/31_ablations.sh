@@ -13,8 +13,13 @@
 # Sensitivity runs. Same scenarios, one knob moved at a time.
 #
 # Each entry below is a tag plus the overrides that define it. Everything replays
-# the stored scenario sets, so none of this costs a new simulation -- which is the
+# the stored scenario sets, so none of this costs a new simulation, which is the
 # whole reason the two stages were separated.
+#
+# Five seeds, not ten. Three metaheuristics at ten seeds is about thirteen hours
+# against a twelve hour limit, and a sensitivity check does not need the precision
+# the headline runs get. The seed noise floor for the displacement metrics comes
+# from 32_backtest_ea.sh, not from here.
 
 source "$(dirname "$0")/env.sh"
 
@@ -56,6 +61,6 @@ python scripts/run_backtest.py \
     --config configs/base.yaml \
     --forecaster "$FORECASTER" \
     --allocator ga de cmaes cvar_lp equal hrp \
-    --seeds 10 \
+    --seeds 5 \
     --tag "$tag" \
     "${overrides[@]}"

@@ -10,6 +10,7 @@ finished.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from itertools import combinations
@@ -650,6 +651,110 @@ def table_objective_difference(
     return frame
 
 
+def table_sensitivity(
+    runs: Path,
+    panel_dir: Path,
+    cfg,
+    summaries: pd.DataFrame,
+    allocator: str = "ga",
+) -> tuple[pd.DataFrame, dict]:
+    """Decision movement and realised performance side by side, per generator.
+
+    The two can come apart, and every paper in this area measures only the second
+    one, so the case where they do would go unnoticed. Three things can happen and
+    the table has to distinguish them:
+
+    - the decision moves and performance follows: the generator matters, and the
+      question becomes which diagnostic predicts it;
+    - neither moves: the program is insensitive to its generator inside this class,
+      which is a statement about the formulation;
+    - the decision sits at the seed noise floor and performance still varies: the
+      variation came from the realised path, not from the generator. That is a
+      decomposition this literature leaves mixed, and it is the most interesting of
+      the three.
+
+    ``displacement_over_noise`` below one means swapping the generator moves the
+    portfolio less than rerunning one generator with a different seed.
+    """
+    between, within = table_displacement(runs, allocator)
+    by_date = displacement_by_date(runs, allocator)
+    if between.empty or by_date.empty:
+        return pd.DataFrame(), {}
+
+    noise_floor = float(between.attrs.get("noise_floor_l1", np.nan))
+
+    # Both sides of this ratio have to be measured the same way. `between` and
+    # `within` are both averages over raw seed pairs, so they are comparable.
+    # `displacement_by_date` averages the weights over seeds before comparing, which
+    # cancels most of the Monte Carlo noise, and dividing that by a raw-pair floor
+    # would compare a denoised numerator against a noisy denominator and make
+    # everything look insensitive. It is kept for the panel, where it is the right
+    # quantity, and reported here as its own column.
+    stacked = pd.concat(
+        [
+            between.rename(columns={"forecaster_a": "forecaster"})[
+                ["forecaster", "l1_mean", "jaccard_mean"]
+            ],
+            between.rename(columns={"forecaster_b": "forecaster"})[
+                ["forecaster", "l1_mean", "jaccard_mean"]
+            ],
+        ]
+    )
+    per_generator = (
+        stacked.groupby("forecaster", as_index=False)[["l1_mean", "jaccard_mean"]]
+        .mean()
+        .rename(columns={"l1_mean": "displacement", "jaccard_mean": "overlap"})
+    )
+    per_generator["displacement_over_noise"] = per_generator["displacement"] / noise_floor
+
+    seed_averaged = (
+        by_date.groupby("forecaster", as_index=False)["displacement_l1"]
+        .mean()
+        .rename(columns={"displacement_l1": "displacement_seed_averaged"})
+    )
+    per_generator = per_generator.merge(seed_averaged, on="forecaster", how="left")
+
+    reference = summaries[summaries["allocator"] == allocator]
+    performance = (
+        reference.groupby("forecaster", as_index=False)[["sharpe", "ann_return"]].mean()
+        if not reference.empty
+        else pd.DataFrame(columns=["forecaster", "sharpe", "ann_return"])
+    )
+    table = per_generator.merge(performance, on="forecaster", how="left")
+
+    gaps = table_objective_difference(runs, panel_dir, cfg, allocator)
+    if not gaps.empty:
+        table = table.merge(
+            gaps.groupby("forecaster", as_index=False)["objective_gap"].mean(),
+            on="forecaster",
+            how="left",
+        )
+
+    headline = {
+        "noise_floor_l1": noise_floor,
+        "mean_displacement": float(per_generator["displacement"].mean()),
+        "mean_displacement_over_noise": float(per_generator["displacement_over_noise"].mean()),
+        "displacement_spread": float(per_generator["displacement"].std()),
+        "sharpe_spread": float(table["sharpe"].std()) if "sharpe" in table else np.nan,
+        "n_generators": int(len(table)),
+    }
+    # The reading of the table in one field, so a null does not get written up as a
+    # failure by whoever opens the csv first.
+    moves = headline["mean_displacement_over_noise"] > 1.5
+    performs = bool(np.isfinite(headline["sharpe_spread"]) and headline["sharpe_spread"] > 0.05)
+    headline["reading"] = {
+        (True, True): "decision moves and performance follows",
+        (True, False): "decision moves, performance does not separate",
+        (False, True): "decision at the noise floor, performance still varies: "
+                       "the variation is in the realised path, not the generator",
+        (False, False): "insensitive to the generator within this class",
+    }[(moves, performs)]
+
+    table = table.sort_values("displacement_over_noise", ascending=False, ignore_index=True)
+    table.attrs.update(headline)
+    return table, headline
+
+
 def table_tests(daily: pd.DataFrame, summaries: pd.DataFrame, cfg) -> pd.DataFrame:
     """Sharpe comparisons against the two benchmarks, plus deflation and PBO."""
     benchmarks = [c for c in daily.columns if c.split("|")[1] in ("equal", "mcap")]
@@ -834,6 +939,19 @@ def main() -> int:
             by_date = displacement_by_date(runs, args.reference_allocator)
             if not by_date.empty:
                 by_date.to_parquet(artifacts / "displacement_panel.parquet", index=False)
+
+            sensitivity, headline = table_sensitivity(
+                runs, cfg.resolve("paths.panel", root), cfg, summaries,
+                args.reference_allocator,
+            )
+            if not sensitivity.empty:
+                write(sensitivity, artifacts, "sensitivity",
+                      "Decision displacement and realised performance per generator. "
+                      f"Reading: {headline['reading']}.")
+                (artifacts / "sensitivity_headline.json").write_text(
+                    json.dumps(headline, indent=2), encoding="utf-8"
+                )
+                log.info("sensitivity: %s", headline["reading"])
 
             gaps = table_objective_difference(
                 runs, cfg.resolve("paths.panel", root), cfg, args.reference_allocator

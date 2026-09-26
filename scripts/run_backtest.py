@@ -98,9 +98,13 @@ def main() -> int:
     }
 
     out_root = runs_dir / "backtests" / (args.forecaster + (f"_{args.tag}" if args.tag else ""))
+    summary_dir = runs_dir / "summary"
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    stem = args.forecaster + (f"_{args.tag}" if args.tag else "")
     summary_rows = []
 
     for name in names:
+        allocator_rows = []
         allocator = build_allocator(name, cfg)
         seeds = range(n_seeds) if allocator.stochastic else [0]
         for seed in seeds:
@@ -144,17 +148,24 @@ def main() -> int:
                     **stats,
                 }
             )
+            allocator_rows.append(summary_rows[-1])
             log.info(
                 "  sharpe %.3f  ann.ret %.1f%%  mdd %.1f%%  turnover %.2f",
                 stats["sharpe"], 100 * stats["ann_return"], 100 * stats["max_drawdown"],
                 summary_rows[-1]["mean_turnover"],
             )
 
-    summary_dir = runs_dir / "summary"
-    summary_dir.mkdir(parents=True, exist_ok=True)
-    target = summary_dir / f"{args.forecaster}{('_' + args.tag) if args.tag else ''}.parquet"
-    pd.DataFrame(summary_rows).to_parquet(target, index=False)
-    log.info("wrote %d rows to %s", len(summary_rows), target)
+        # One file per forecaster and allocator, written as soon as that allocator
+        # is done. Two reasons. The metaheuristics run in their own array job, so
+        # several tasks share a forecaster and a single file per forecaster would
+        # have them overwrite each other with only the last one surviving. And a
+        # task that runs out of wall clock keeps whatever finished instead of
+        # losing the lot.
+        target = summary_dir / f"{stem}__{name}.parquet"
+        pd.DataFrame(allocator_rows).to_parquet(target, index=False)
+        log.info("  wrote %d rows to %s", len(allocator_rows), target.name)
+
+    log.info("%d runs summarised for %s", len(summary_rows), args.forecaster)
     return 0
 
 

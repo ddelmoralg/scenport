@@ -43,13 +43,16 @@ echo "forecast (gpu)  : $fc_gpu"
 bt=$(sbatch --parsable --dependency="afterok:${fc_cpu}:${fc_gpu}" slurm/30_backtest.sh)
 echo "backtest        : $bt"
 
+bt_ea=$(sbatch --parsable --dependency="afterok:${fc_cpu}:${fc_gpu}" slurm/32_backtest_ea.sh)
+echo "backtest (ea)   : $bt_ea"
+
 abl=$(sbatch --parsable --dependency="afterok:${fc_cpu}" slurm/31_ablations.sh)
 echo "ablations       : $abl"
 
 exact=$(sbatch --parsable --dependency="afterok:${fc_cpu}" slurm/40_exact.sh)
 echo "exact           : $exact"
 
-agg=$(sbatch --parsable --dependency="afterok:${bt}:${abl}:${exact}" slurm/50_aggregate.sh)
+agg=$(sbatch --parsable --dependency="afterok:${bt}:${bt_ea}:${abl}:${exact}" slurm/50_aggregate.sh)
 echo "aggregate       : $agg"
 
 pub=$(sbatch --parsable --dependency="afterok:${agg}" slurm/60_publish.sh)
@@ -57,4 +60,4 @@ echo "publish         : $pub"
 
 echo
 echo "watch:   squeue -u \$USER -o '%.10i %.14j %.9P %.8T %.10M %R'"
-echo "cancel:  scancel $fc_cpu $fc_gpu $bt $abl $exact $agg $pub"
+echo "cancel:  scancel $fc_cpu $fc_gpu $bt $bt_ea $abl $exact $agg $pub"

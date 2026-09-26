@@ -100,7 +100,7 @@ bash slurm/submit_all.sh
 ```
 
 `submit_all.sh` refuses to run on a dirty tree, pulls, checks the queues it is
-about to use still exist, submits the seven jobs with the right dependencies, and
+about to use still exist, submits the eight jobs with the right dependencies, and
 prints the ids. The last job commits `artifacts/` and
 pushes; if the laptop pushed in the meantime it rebases and retries.
 
@@ -143,7 +143,8 @@ differ.
 |---|---|---|---|
 | `10_forecast_cpu` | `medium` | 8 forecasters x 16 shards, 8 cores, 20 at a time | 4-10 h |
 | `20_forecast_gpu` | `medium` | 3 forecasters x 2 shards, 1 GPU, 3 at a time | 2-5 h |
-| `30_backtest` | `medium` | one task per forecaster | 1-3 h |
+| `30_backtest` | `medium` | one task per forecaster, cheap allocators | under 1 h |
+| `32_backtest_ea` | `medium` | 11 forecasters x 4 metaheuristics, 5 seeds | 2-3 h |
 | `31_ablations` | `medium` | 18 sensitivity runs | 2-6 h |
 | `40_exact` | `long` | gaps + scaling sweep, 24 cores | up to 3 days |
 | `50_aggregate` | `medium` | one task | under 1 h |
