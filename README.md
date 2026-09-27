@@ -199,7 +199,10 @@ python scripts/run_backtest.py --forecaster garch --set alloc.cardinality=5 \
 ## Data
 
 Prices and market capitalisations: [Coin Metrics
-Community](https://docs.coinmetrics.io/api/v4), no key required. Chosen over the
+Community](https://docs.coinmetrics.io/api/v4), no key required, published under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). That licence is
+why the panel can be committed here: it permits redistribution with attribution
+for non-commercial use. See [`data/panel/SOURCE.md`](data/panel/SOURCE.md). Chosen over the
 alternatives because it publishes a long history of market capitalisation, without
 which the universe cannot be rebuilt as it stood at each rebalancing date. Risk-free
 rate: `DTB3` from FRED.
