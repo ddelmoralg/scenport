@@ -296,6 +296,31 @@ def check_sensitivity(artifacts: Path, report: Report) -> None:
         )
 
 
+def check_cvar_forms_agree(cfg, report: Report) -> None:
+    """The two CVaR implementations have to coincide, or the gaps mean nothing.
+
+    The metaheuristics take the mean of the m = round((1-alpha)S) worst scenarios
+    with a partial sort, because the objective is evaluated once per candidate per
+    generation and a full sort is the bottleneck. The linear programme and the
+    mixed-integer model use the Rockafellar-Uryasev form. The two agree exactly
+    when (1-alpha)S is a whole number and only approximately otherwise, so a gap
+    between a metaheuristic and the exact optimum would then be partly a
+    difference of definition rather than of search.
+    """
+    log.info("CVaR consistency")
+    alpha = float(cfg.get("alloc.cvar_alpha", 0.95))
+    for label, n_scenarios in (
+        ("backtest", int(cfg.get("scenarios.n_paths", 1000))),
+        ("gap study", 400),
+    ):
+        tail = (1.0 - alpha) * n_scenarios
+        report.check(
+            abs(tail - round(tail)) < 1e-9,
+            f"{label}: (1-{alpha}) x {n_scenarios} = {tail:g} is a whole number, so the "
+            "empirical and Rockafellar-Uryasev forms coincide",
+        )
+
+
 def check_universe(panel_dir: Path, cfg, report: Report) -> None:
     log.info("universe")
     path = panel_dir / "universe.parquet"
@@ -334,6 +359,7 @@ def main() -> int:
     panel_dir = cfg.resolve("paths.panel", root)
 
     report = Report()
+    check_cvar_forms_agree(cfg, report)
     check_universe(panel_dir, cfg, report)
     check_scenarios(runs, report)
     check_objective_scale(runs, report)

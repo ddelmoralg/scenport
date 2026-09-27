@@ -78,7 +78,7 @@ backtest:
 
 scenarios:
   n_paths: 1000
-  coupling: gaussian_copula          # gaussian_copula | independent | historical_ranks
+  coupling: gaussian_copula          # gaussian_copula | empirical | independent
   coupling_window: 365               # days of residuals used for the rank correlation
   seed: 20260805
   # Ceiling on a simulated cumulative return over the horizon. Twice the largest
