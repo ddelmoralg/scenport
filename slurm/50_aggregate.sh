@@ -29,6 +29,11 @@ python scripts/aggregate.py --config configs/base.yaml
 python scripts/make_figures.py --config configs/base.yaml
 python scripts/export_instances.py --config configs/base.yaml
 
+# Last thing before anything leaves this machine. The first full run finished
+# green and produced results that were measuring the wrong thing, so the chain
+# now refuses to publish output it can tell is impossible.
+python scripts/check_results.py --config configs/base.yaml
+
 echo
 echo "artifacts:"
 ls -lh artifacts

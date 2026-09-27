@@ -11,6 +11,7 @@ A forecaster produces simulated forward paths, not a point. Two conventions:
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -99,22 +100,31 @@ class ScenarioSet:
         )
 
     def to_npz(self, path) -> None:
+        # meta travels as JSON. It carries how much of this set hit the ceiling,
+        # which is a property of the generator worth reporting and was being
+        # dropped here, so nothing downstream could see it.
         np.savez_compressed(
             path,
             paths=self.paths.astype(np.float32),
             assets=np.array(self.assets, dtype=object),
             origin=str(self.origin),
             forecaster=self.forecaster,
+            meta=json.dumps(self.meta, default=str),
         )
 
     @classmethod
     def from_npz(cls, path) -> ScenarioSet:
         with np.load(path, allow_pickle=True) as z:
+            try:
+                meta = json.loads(str(z["meta"])) if "meta" in z else {}
+            except (ValueError, KeyError):
+                meta = {}
             return cls(
                 paths=z["paths"].astype(np.float64),
                 assets=[str(a) for a in z["assets"]],
                 origin=pd.Timestamp(str(z["origin"])),
                 forecaster=str(z["forecaster"]),
+                meta=meta,
             )
 
 
