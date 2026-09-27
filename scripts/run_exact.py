@@ -79,8 +79,29 @@ def gaps(args, cfg, root) -> pd.DataFrame:
                 "rebalance": date, "allocator": "milp", "seed": -1,
                 "objective": milp_value, "seconds": milp_seconds,
                 "relative_gap": 0.0, "status": best.diagnostics.get("status"),
+                "kind": "exact",
             }
         )
+
+        # The relaxation, recorded as what it is. Its answer holds more names than
+        # the cardinality allows, so it is not a competitor and its distance above
+        # the exact optimum is not a gap in the usual sense: it is the integrality
+        # gap, which is what the discrete constraints cost.
+        try:
+            relaxed = alloc.get("cvar_lp_bound")(instance, np.random.default_rng(0))
+            bound_value = float(score(relaxed.weights, instance)[0])
+            denom = abs(milp_value) if abs(milp_value) > 1e-12 else 1.0
+            rows.append(
+                {
+                    "rebalance": date, "allocator": "cvar_lp_bound", "seed": -1,
+                    "objective": bound_value, "seconds": relaxed.seconds,
+                    "relative_gap": (bound_value - milp_value) / denom,
+                    "status": relaxed.diagnostics.get("status"),
+                    "kind": "relaxation",
+                }
+            )
+        except Exception as exc:  # the LP is optional, the gap study is not
+            log.warning("%s: relaxation bound failed (%s)", date.date(), exc)
 
         for name in args.allocator:
             allocator = alloc.get(name) if name not in ("ga", "de", "pso", "cmaes") else alloc.get(
@@ -101,6 +122,7 @@ def gaps(args, cfg, root) -> pd.DataFrame:
                         "objective": value, "seconds": result.seconds,
                         "relative_gap": (milp_value - value) / denom,
                         "feasible": result.diagnostics.get("feasible"),
+                        "kind": "candidate",
                     }
                 )
         log.info("%s: milp %.6f in %.1fs", date.date(), milp_value, milp_seconds)

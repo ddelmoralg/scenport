@@ -90,16 +90,39 @@ def test_search_is_close_to_the_mixed_integer_optimum(problem, rng):
 
 @pytest.mark.slow
 def test_the_relaxation_bounds_the_integer_problem(problem, rng):
-    """Dropping the cardinality constraint can only help, never hurt."""
+    """Dropping the cardinality constraint can only help, never hurt.
+
+    This used to be asserted of `cvar_lp`, and it passed, which was the clue
+    nobody followed: an allocator that beats a proven optimum is not a good
+    allocator, it is solving a different problem. The relaxation now has its own
+    name and the feasible version is held to the opposite standard below.
+    """
     pytest.importorskip("cvxpy")
     from scenport.alloc.exact import MilpExact, subsample
 
     instance = subsample(problem, 250, np.random.default_rng(0))
-    relaxed = alloc.get("cvar_lp")(instance, rng)
+    bound = alloc.get("cvar_lp_bound")(instance, rng)
     exact = MilpExact(max_scenarios=250)(instance, rng)
-    assert float(score(relaxed.weights, instance)[0]) >= float(
+    assert float(score(bound.weights, instance)[0]) >= float(
         score(exact.weights, instance)[0]
     ) - 1e-6
+
+
+@pytest.mark.slow
+def test_the_feasible_lp_does_not_beat_the_exact_optimum(problem, rng):
+    """The invariant the old test was missing."""
+    pytest.importorskip("cvxpy")
+    from scenport.alloc.exact import MilpExact, subsample
+    from scenport.alloc.objective import is_feasible
+
+    instance = subsample(problem, 250, np.random.default_rng(0))
+    heuristic = alloc.get("cvar_lp")(instance, rng)
+    exact = MilpExact(max_scenarios=250)(instance, rng)
+
+    assert is_feasible(heuristic.weights, instance)
+    assert float(score(heuristic.weights, instance)[0]) <= float(
+        score(exact.weights, instance)[0]
+    ) + 1e-9
 
 
 def test_convex_allocators_ignore_the_seed(problem):

@@ -13,6 +13,11 @@ CONVEX = ("minvar", "maxsharpe", "riskparity", "hrp", "cvar_lp")
 EVOLUTIONARY = ("ga", "de", "pso", "cmaes")
 EXACT = ("milp",)
 
+#: Not allocators. They answer a relaxed problem, so they will hold more names than
+#: the cardinality allows and beat the exact optimum for that reason alone. They
+#: belong in the gap study as upper bounds and nowhere near a backtest.
+BOUNDS = ("cvar_lp_bound",)
+
 #: Allocators whose answer depends on the seed and therefore need repeated runs.
 STOCHASTIC = ("random", *EVOLUTIONARY)
 

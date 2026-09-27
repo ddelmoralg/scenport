@@ -18,6 +18,23 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+#: Ceiling on a simulated cumulative return, and a floor of -1 because a long-only
+#: position cannot lose more than it cost.
+#:
+#: Every forecaster here simulates daily returns and compounds them over the
+#: horizon, and a fat-tailed model can put out a handful of draws whose product is
+#: astronomical. Left alone they produce 30-day returns of 1e10 and worse, which
+#: then dominate the mean in a mean-CVaR objective and decide the portfolio on
+#: their own.
+#:
+#: The bound is twice the largest 30-day return anywhere in the panel over ten
+#: years and seventy-six assets, which is 45x, held by XVG. The 99.99th percentile
+#: is 22x. Anything above this has no precedent in the data the models were fitted
+#: to, so clipping it removes arithmetic rather than removing tail risk, and the
+#: fraction clipped is recorded per scenario set because a generator that hits the
+#: bound often is telling you something about itself.
+MAX_CUMULATIVE_RETURN = 90.0
+
 
 @dataclass
 class ScenarioSet:
@@ -140,12 +157,23 @@ class ScenarioForecaster(ABC):
             series = history[asset].dropna()
             child = np.random.default_rng(rng.integers(0, 2**63 - 1))
             out[:, :, j] = self.simulate_one(series, horizon, n_paths, child)
+
+        cap = float(self.params.get("max_cumulative_return", MAX_CUMULATIVE_RETURN))
+        clipped = int((out > cap).sum() + (out < -1.0).sum())
+        if clipped:
+            out = np.clip(out, -1.0, cap)
+
         return ScenarioSet(
             paths=out,
             assets=assets,
             origin=pd.Timestamp(origin if origin is not None else history.index[-1]),
             forecaster=self.name,
-            meta={"params": dict(self.params)},
+            meta={
+                "params": dict(self.params),
+                "max_cumulative_return": cap,
+                "clipped_points": clipped,
+                "clipped_share": clipped / out.size if out.size else 0.0,
+            },
         )
 
 

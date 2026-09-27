@@ -137,9 +137,17 @@ def main() -> int:
         return 0
 
     forecaster_params = {
-        key: cfgmod.coerce(value)
-        for key, value in (item.split("=", 1) for item in args.param)
+        # The scenario ceiling is a property of the study, not of any one model, so
+        # it comes from the config and every forecaster gets the same one. --param
+        # can still override it.
+        "max_cumulative_return": float(cfg.get("scenarios.max_cumulative_return", 90.0)),
     }
+    forecaster_params.update(
+        {
+            key: cfgmod.coerce(value)
+            for key, value in (item.split("=", 1) for item in args.param)
+        }
+    )
 
     payload = [
         (d, str(Path(args.config).resolve()), args.overrides, args.forecaster, args.seed,

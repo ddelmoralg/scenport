@@ -164,12 +164,20 @@ class CvarLinearProgram(Allocator):
     """Mean-CVaR at global optimality, without the discrete constraints.
 
     Rockafellar and Uryasev's linear formulation of CVaR, with the transaction cost
-    linearised through the usual pair of non-negative auxiliaries. This is the upper
-    bound on what any allocator can achieve on the relaxed problem, so it is the
-    reference the mixed-integer and evolutionary solutions are measured against.
+    linearised through the usual pair of non-negative auxiliaries.
+
+    The programme itself knows nothing about the cardinality limit or the minimum
+    position, because neither is linear. This class solves it and then trims the
+    support and reprojects, which makes it a feasible heuristic and a fair
+    competitor. For the relaxation itself, see CvarLpBound.
     """
 
     name = "cvar_lp"
+
+    #: Trim to the cardinality limit and reproject, so the answer is a portfolio
+    #: that satisfies every constraint and can be compared with the others on equal
+    #: terms. CvarLpBound turns this off and keeps the relaxation.
+    enforce_support = True
 
     def solve(self, problem, rng):
         import cvxpy as cp
@@ -201,11 +209,27 @@ class CvarLinearProgram(Allocator):
         if w.value is None:
             raise RuntimeError(f"CVaR LP failed with status {prob.status}")
         return Allocation(
-            _clean(w.value, problem, enforce_support=False),
+            _clean(w.value, problem, enforce_support=self.enforce_support),
             self.name,
             0.0,
             diagnostics={"status": prob.status, "lp_bound": float(prob.value)},
         )
+
+
+@register
+class CvarLpBound(CvarLinearProgram):
+    """The same linear programme, left as the relaxation it is.
+
+    Its answer ignores the cardinality limit and the minimum position, so it is not
+    a portfolio anyone could hold and it does not belong in a backtest: it will hold
+    more names than the limit allows and score better than the exact optimum for
+    that reason alone. What it gives is the upper bound on the relaxed problem, and
+    the distance from it to the mixed-integer optimum is the integrality gap, which
+    is what the discrete constraints actually cost.
+    """
+
+    name = "cvar_lp_bound"
+    enforce_support = False
 
 
 # ---------------------------------------------------------------------------

@@ -81,6 +81,10 @@ scenarios:
   coupling: gaussian_copula          # gaussian_copula | independent | historical_ranks
   coupling_window: 365               # days of residuals used for the rank correlation
   seed: 20260805
+  # Ceiling on a simulated cumulative return over the horizon. Twice the largest
+  # 30-day return in the panel, which is 45x; the 99.99th percentile is 22x. See
+  # scenport/forecast/base.py for why this exists.
+  max_cumulative_return: 90.0
 
 alloc:
   w_max: 0.20

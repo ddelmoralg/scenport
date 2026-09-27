@@ -865,12 +865,22 @@ def table_regimes(daily: pd.DataFrame, runs: Path, cfg) -> pd.DataFrame:
 
 
 def table_exact(runs: Path) -> pd.DataFrame:
+    """Distance from the exact optimum, by allocator.
+
+    The relaxation bound is kept separate. Its row is not a gap in the same sense:
+    it sits above the exact optimum because it answers a problem without the
+    cardinality limit, and mixing it in with the candidates reads as an allocator
+    that beat branch and bound.
+    """
     path = runs / "exact" / "gaps.parquet"
     if not path.exists():
         return pd.DataFrame()
     frame = pd.read_parquet(path)
-    return (
-        frame.groupby("allocator")
+    kind = frame["kind"] if "kind" in frame else pd.Series("candidate", index=frame.index)
+
+    table = (
+        frame.assign(kind=kind)
+        .groupby(["kind", "allocator"])
         .agg(
             mean_gap=("relative_gap", "mean"),
             median_gap=("relative_gap", "median"),
@@ -879,8 +889,10 @@ def table_exact(runs: Path) -> pd.DataFrame:
             n=("relative_gap", "size"),
         )
         .reset_index()
-        .sort_values("mean_gap", ignore_index=True)
     )
+    order = {"exact": 0, "candidate": 1, "relaxation": 2}
+    table["_o"] = table["kind"].map(order).fillna(1)
+    return table.sort_values(["_o", "mean_gap"], ignore_index=True).drop(columns="_o")
 
 
 # ---------------------------------------------------------------------------
