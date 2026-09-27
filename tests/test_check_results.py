@@ -36,15 +36,26 @@ def _gaps(tmp_path, rows) -> Path:
     return runs
 
 
-def _scenario_set(path: Path, forecaster: str, clipped_share: float):
+CEILING = 90.0
+
+
+def _scenario_set(path: Path, forecaster: str, clipped_share: float, size: int = 200_000):
+    """A set in which `clipped_share` of the points sit exactly on the ceiling.
+
+    Written as real paths rather than as a metadata field, because that is how the
+    check reads it: a clipped point lands on the bound, so the data says how often
+    that happened whether or not anything recorded it.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    flat = np.full(size, 0.1, dtype=np.float32)
+    flat[: int(round(clipped_share * size))] = CEILING
     np.savez_compressed(
         path,
-        paths=np.zeros((4, 3, 2), dtype=np.float32),
+        paths=flat.reshape(size // 100, 50, 2),
         assets=np.array(["AAA", "BBB"], dtype=object),
         origin="2024-01-01",
         forecaster=forecaster,
-        meta=json.dumps({"clipped_share": clipped_share, "clipped_points": 1}),
+        meta=json.dumps({"max_cumulative_return": CEILING}),
     )
 
 
