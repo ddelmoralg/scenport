@@ -119,14 +119,41 @@ def check_scenarios(runs: Path, report: Report) -> None:
                     except ValueError:
                         pass
                 touching = int(np.isclose(paths, ceiling).sum() + np.isclose(paths, -1.0).sum())
-                rows.append({"forecaster": name, "clipped_share": touching / paths.size})
+                rows.append(
+                    {
+                        "forecaster": name,
+                        "clipped_share": touching / paths.size,
+                        # Not "did it lean on the ceiling" but "did it go through
+                        # it". The first version of this check only asked the
+                        # former, and the forecasters that override simulate()
+                        # skipped the bound entirely: the transformer reached
+                        # 3.98e15 while AR-GARCH sat at exactly 90, so nothing was
+                        # sitting on the ceiling to count.
+                        "beyond": float(np.nanmax(paths)),
+                        "below": float(np.nanmin(paths)),
+                    }
+                )
         except Exception:  # a truncated set is a different problem
             continue
     if not rows:
         report.warn(False, "no readable scenario sets")
         return
 
-    by_forecaster = pd.DataFrame(rows).groupby("forecaster")["clipped_share"].mean()
+    frame = pd.DataFrame(rows)
+    worst = frame.groupby("forecaster")[["beyond", "below"]].agg({"beyond": "max", "below": "min"})
+    for name, row in worst.iterrows():
+        report.check(
+            row["beyond"] <= MAX_CUMULATIVE_RETURN * (1 + 1e-6),
+            f"{name}: largest simulated return is {row['beyond']:.4g}, the ceiling is "
+            f"{MAX_CUMULATIVE_RETURN:g}",
+        )
+        report.check(
+            row["below"] >= -1.0 - 1e-6,
+            f"{name}: smallest simulated return is {row['below']:.4g}; a long-only "
+            "position cannot lose more than it cost",
+        )
+
+    by_forecaster = frame.groupby("forecaster")["clipped_share"].mean()
     for name, share in by_forecaster.sort_values(ascending=False).items():
         report.warn(
             share < CLIP_SHARE_WARN,

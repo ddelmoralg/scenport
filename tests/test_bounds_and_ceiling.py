@@ -10,6 +10,8 @@ nothing to do with being a better allocator.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -70,6 +72,53 @@ def test_a_wild_generator_is_brought_back_to_the_bound():
     tamed = Explosive().simulate(_prices(), horizon=30, n_paths=200, rng=np.random.default_rng(0))
     assert tamed.paths.max() <= base.MAX_CUMULATIVE_RETURN + 1e-9
     assert tamed.meta["clipped_share"] > 0
+
+
+def test_a_forecaster_that_replaces_simulate_cannot_step_around_the_ceiling():
+    """The one the first version of this missed.
+
+    The neural forecasters batch every asset through a single network, so they
+    override simulate() wholesale rather than implementing simulate_one. A ceiling
+    applied inside simulate() therefore never ran for them, and the transformer
+    reached a 30-day return of 3.98e15 while AR-GARCH sat neatly at 90. The bound
+    lives in ScenarioSet now, which every path into a scenario set goes through.
+    """
+
+    class Overriding(base.ScenarioForecaster):
+        name = "overriding_for_test"
+
+        def simulate_one(self, history, horizon, n_paths, rng):  # pragma: no cover
+            raise NotImplementedError("this one builds the set itself")
+
+        def simulate(self, history, horizon, n_paths, rng, origin=None, progress=None):
+            return base.ScenarioSet(
+                paths=np.full((6, 4, 2), 1e15),
+                assets=["AAA", "BBB"],
+                origin=pd.Timestamp("2024-01-01"),
+                forecaster=self.name,
+            )
+
+    out = Overriding().simulate(_prices(), horizon=4, n_paths=6, rng=np.random.default_rng(0))
+    assert out.paths.max() <= base.MAX_CUMULATIVE_RETURN + 1e-9
+    assert out.meta["clipped_share"] > 0
+
+
+def test_loading_an_unbounded_set_bounds_it():
+    """Sets written before the ceiling existed are bounded when they are read."""
+    import tempfile
+
+    raw = base.ScenarioSet(
+        paths=np.full((4, 3, 2), 5.0),
+        assets=["AAA", "BBB"],
+        origin=pd.Timestamp("2024-01-01"),
+        forecaster="legacy_for_test",
+    )
+    raw.paths[0, 0, 0] = 1e12  # sneak past the constructor, as an old file would
+    target = Path(tempfile.mkdtemp()) / "legacy.npz"
+    raw.to_npz(target)
+
+    back = base.ScenarioSet.from_npz(target)
+    assert back.paths.max() <= base.MAX_CUMULATIVE_RETURN + 1e-9
 
 
 # ---------------------------------------------------------------------------

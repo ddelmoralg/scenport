@@ -262,3 +262,34 @@ def test_a_real_violation_in_a_base_run_still_fails(checker, tmp_path):
     checker.check_feasibility(runs, cfg, report)
     assert report.failures
     assert "over the cap" in report.failures[0]
+
+
+def test_a_set_that_went_through_the_ceiling_is_caught(checker, tmp_path):
+    """What the first version of this check could not see.
+
+    It only counted points sitting on the bound, so a generator that skipped the
+    bound entirely had nothing on it to count and passed. The transformer reached
+    3.98e15 that way while AR-GARCH sat at exactly 90.
+    """
+    runs = tmp_path / "runs"
+    d = runs / "scenarios" / "transformer" / "seed00"
+    d.mkdir(parents=True)
+    paths = np.full((4, 3, 2), 0.1, dtype=np.float32)
+    paths[0, 0, 0] = 3.98e15
+    np.savez_compressed(
+        d / "2021-07-01.npz", paths=paths,
+        assets=np.array(["AAA", "BBB"], dtype=object),
+        origin="2021-07-01", forecaster="transformer",
+    )
+    report = checker.Report()
+    checker.check_scenarios(runs, report)
+    assert report.failures
+    assert "the ceiling is" in report.failures[0]
+
+
+def test_a_bounded_set_passes_the_ceiling_check(checker, tmp_path):
+    runs = tmp_path / "runs"
+    _scenario_set(runs / "scenarios" / "garch" / "seed00" / "2024-01-01.npz", "garch", 3.3e-4)
+    report = checker.Report()
+    checker.check_scenarios(runs, report)
+    assert not report.failures

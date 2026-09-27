@@ -55,6 +55,20 @@ class ScenarioSet:
                 f"paths has {self.paths.shape[2]} assets but {len(self.assets)} names were given"
             )
 
+        # The bound lives here, not in simulate(), because simulate() can be
+        # overridden and was: the neural forecasters batch every asset through one
+        # network and replace it wholesale, so they sailed past a ceiling applied
+        # there and produced 30-day returns of 3.98e15. Every scenario set is
+        # constructed through this, however it was built or loaded, so this is the
+        # one place that cannot be stepped around.
+        over = int((self.paths > MAX_CUMULATIVE_RETURN).sum() + (self.paths < -1.0).sum())
+        if over:
+            self.paths = np.clip(self.paths, -1.0, MAX_CUMULATIVE_RETURN)
+            self.meta.setdefault("clipped_points", 0)
+            self.meta["clipped_points"] += over
+            self.meta["clipped_share"] = self.meta["clipped_points"] / self.paths.size
+            self.meta.setdefault("max_cumulative_return", MAX_CUMULATIVE_RETURN)
+
     @property
     def n_paths(self) -> int:
         return self.paths.shape[0]
@@ -168,7 +182,13 @@ class ScenarioForecaster(ABC):
             child = np.random.default_rng(rng.integers(0, 2**63 - 1))
             out[:, :, j] = self.simulate_one(series, horizon, n_paths, child)
 
-        cap = float(self.params.get("max_cumulative_return", MAX_CUMULATIVE_RETURN))
+        # A forecaster may ask for a tighter bound than the global one. The loose
+        # direction is not available: ScenarioSet enforces the global ceiling
+        # whatever arrives.
+        cap = min(
+            float(self.params.get("max_cumulative_return", MAX_CUMULATIVE_RETURN)),
+            MAX_CUMULATIVE_RETURN,
+        )
         clipped = int((out > cap).sum() + (out < -1.0).sum())
         if clipped:
             out = np.clip(out, -1.0, cap)
