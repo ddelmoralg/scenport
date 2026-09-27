@@ -1,0 +1,16 @@
+\begin{table}
+\caption{Period return on forecast quality, with a fixed effect per rebalancing date, errors clustered on the date, interval from resampling whole dates and p value from permuting scores within a date. This is powered for the date-varying part of the relationship, not for a ranking of the generators.}
+\label{tab:transmission_panel}
+\begin{tabular}{llrrrrrrrrrr}
+\toprule
+score & beta & std\_error & t\_stat & p\_clustered & p\_permutation & ci\_lower & ci\_upper & exposure\_controlled & beta\_exposure & n\_obs & n\_dates \\
+\midrule
+mase & -0.001 & 0.000 & -2.996 & 0.003 & 0.129 & -0.002 & 0.000 & True & -0.054 & 935 & 85 \\
+crps & -0.087 & 0.071 & -1.224 & 0.221 & 0.000 & -0.338 & 0.017 & True & -0.046 & 935 & 85 \\
+pinball & -0.193 & 0.178 & -1.088 & 0.277 & 0.004 & -0.822 & 0.089 & True & -0.047 & 935 & 85 \\
+coverage\_error & -0.065 & 0.028 & -2.306 & 0.021 & 0.000 & -0.128 & -0.016 & True & -0.035 & 935 & 85 \\
+energy\_score & -0.033 & 0.024 & -1.405 & 0.160 & 0.000 & -0.099 & -0.003 & True & -0.020 & 935 & 85 \\
+variogram\_score & 0.000 & 0.000 & 12021.996 & 0.000 & 0.357 & -0.001 & 0.000 & True & 0.000 & 935 & 85 \\
+\bottomrule
+\end{tabular}
+\end{table}
