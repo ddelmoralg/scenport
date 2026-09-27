@@ -370,6 +370,20 @@ def _transmission_panel(
         ci = tests.cluster_bootstrap_ci(y, x, clusters, column=0, reps=2000, seed=0)
         perm = tests.permutation_within_clusters(y, x, clusters, column=0, reps=5000, seed=0)
 
+        # Drop each rebalancing date in turn. Two tests of this null disagreed
+        # about which diagnostics matter, and rather than arbitrate between them
+        # this asks the question neither answers: does the result rest on one
+        # month? For MASE it does. Its t statistic falls from -3.0 to -0.7 when a
+        # single date comes out, and that is a fact about the data rather than
+        # about the choice of standard error.
+        drop_one = []
+        for date in np.unique(clusters):
+            keep = clusters != date
+            if keep.sum() < x.shape[1] + 2:
+                continue
+            drop_one.append(tests.cluster_robust_ols(y[keep], x[keep], clusters[keep])["t_stat"][0])
+        drop_one = np.asarray([t for t in drop_one if np.isfinite(t)])
+
         rows.append(
             {
                 "score": column,
@@ -380,6 +394,17 @@ def _transmission_panel(
                 "p_permutation": float(perm.p_value),
                 "ci_lower": ci["lower"],
                 "ci_upper": ci["upper"],
+                "t_min_drop_one": float(np.min(np.abs(drop_one))) * np.sign(fit["t_stat"][0])
+                if drop_one.size
+                else np.nan,
+                "survives_dropping_any_date": bool(np.all(np.abs(drop_one) > 1.96))
+                if drop_one.size
+                else False,
+                "most_influential_date": str(
+                    pd.Timestamp(np.unique(clusters)[int(np.argmin(np.abs(drop_one)))]).date()
+                )
+                if drop_one.size
+                else "",
                 "exposure_controlled": controlled,
                 "beta_exposure": float(fit["beta"][1]) if controlled else np.nan,
                 "n_obs": int(fit["n_obs"]),
@@ -968,7 +993,8 @@ def main() -> int:
               "date, errors clustered on the date, interval from resampling whole "
               "dates and p value from permuting scores within a date. This is powered "
               "for the date-varying part of the relationship, not for a ranking of "
-              "the generators.")
+              "the generators. survives_dropping_any_date is the one to read first: "
+              "it says whether the result holds however the calendar is cut.")
 
     if "displacement" in args.only:
         between, within = table_displacement(runs, args.reference_allocator)

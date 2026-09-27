@@ -1,0 +1,24 @@
+{
+  "alpha": 0.05,
+  "replications": 120,
+  "n_dates": 85,
+  "n_generators": 11,
+  "measured_on_the_real_panel": {
+    "mase": {
+      "skew": 8.17,
+      "rho": 0.08
+    },
+    "pinball": {
+      "skew": 3.5,
+      "rho": 0.34
+    },
+    "crps": {
+      "skew": 3.17,
+      "rho": 0.36
+    },
+    "coverage_error": {
+      "skew": 0.9,
+      "rho": 0.44
+    }
+  }
+}
