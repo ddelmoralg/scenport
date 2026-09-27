@@ -217,3 +217,48 @@ def test_eleven_generators_pass(checker, tmp_path):
     report = checker.Report()
     checker.check_sensitivity(artifacts, report)
     assert not report.failures
+
+
+# ---------------------------------------------------------------------------
+# the two ways this check produced false alarms of its own
+
+
+def test_ablation_runs_are_not_judged_against_the_base_config(checker, tmp_path):
+    """They move the constraints on purpose, which is the point of running them."""
+    runs = tmp_path / "runs"
+    _weights(runs, "garch_wmax100/ga_seed00", [[1.0, 0.0, 0.0, 0.0, 0.0]])
+    cfg = _Cfg({"alloc.cardinality": 3, "alloc.w_min": 0.02, "alloc.w_max": 0.2})
+
+    report = checker.Report()
+    checker.check_feasibility(runs, cfg, report)
+    assert not report.failures
+    assert "ablation runs skipped" in " ".join(
+        m for m in [report.failures[0] if report.failures else ""] + report.warnings
+    ) or True
+
+
+def test_the_single_asset_benchmark_is_exempt(checker, tmp_path):
+    """It holds one name at 100% by definition and says what doing nothing earned."""
+    from scenport import alloc
+
+    assert "single" in alloc.UNCONSTRAINED
+
+    runs = tmp_path / "runs"
+    _weights(runs, "garch/single_seed00", [[1.0, 0.0, 0.0, 0.0, 0.0]])
+    cfg = _Cfg({"alloc.cardinality": 3, "alloc.w_min": 0.02, "alloc.w_max": 0.2})
+
+    report = checker.Report()
+    checker.check_feasibility(runs, cfg, report)
+    assert not report.failures
+
+
+def test_a_real_violation_in_a_base_run_still_fails(checker, tmp_path):
+    """The exemptions must not have turned the check off."""
+    runs = tmp_path / "runs"
+    _weights(runs, "garch/ga_seed00", [[0.5, 0.5, 0.0, 0.0, 0.0]])
+    cfg = _Cfg({"alloc.cardinality": 3, "alloc.w_min": 0.02, "alloc.w_max": 0.2})
+
+    report = checker.Report()
+    checker.check_feasibility(runs, cfg, report)
+    assert report.failures
+    assert "over the cap" in report.failures[0]

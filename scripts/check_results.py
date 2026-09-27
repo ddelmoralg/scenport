@@ -51,6 +51,24 @@ CLIP_SHARE_WARN = 1e-5
 CLIP_SHARE_FAIL = 0.02
 
 
+def _known_forecasters() -> set[str]:
+    """Forecaster names, so ablation directories can be told apart from runs.
+
+    The ablations write to <forecaster>_<tag>, and they change the constraint set
+    on purpose, so checking them against the base config reports violations that
+    are the point of the experiment.
+    """
+    from scenport.forecast import base as forecast_base
+    from scenport.plots import style
+
+    try:
+        import scenport.forecast.deep  # noqa: F401
+    except Exception:  # torch is optional
+        pass
+
+    return set(forecast_base.available()) | set(style.FORECASTER_ORDER)
+
+
 class Report:
     def __init__(self) -> None:
         self.failures: list[str] = []
@@ -183,9 +201,21 @@ def check_feasibility(runs: Path, cfg, report: Report) -> None:
     w_min = float(cfg.get("alloc.w_min", 0.0))
     w_max = float(cfg.get("alloc.w_max", 1.0))
 
+    from scenport import alloc
+
+    known = _known_forecasters()
     checked = 0
+    skipped_ablations = 0
     offenders: dict[str, str] = {}
     for path in sorted((runs / "backtests").rglob("weights.parquet")):
+        # Ablation runs deliberately move the constraints, so judging them against
+        # the base config says nothing. They live in <forecaster>_<tag> directories.
+        if path.parent.parent.name not in known:
+            skipped_ablations += 1
+            continue
+        if path.parent.name.rsplit("_seed", 1)[0] in alloc.UNCONSTRAINED:
+            continue
+
         weights = pd.read_parquet(path)
         if weights.empty:
             continue
@@ -208,6 +238,7 @@ def check_feasibility(runs: Path, cfg, report: Report) -> None:
     report.check(
         not offenders,
         f"all {checked} weight histories satisfy the constraints"
+        f" ({skipped_ablations} ablation runs skipped, they carry their own)"
         + ("" if not offenders else f"; {list(offenders.items())[:3]}"),
     )
 

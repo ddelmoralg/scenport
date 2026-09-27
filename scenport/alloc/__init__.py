@@ -18,6 +18,13 @@ EXACT = ("milp",)
 #: belong in the gap study as upper bounds and nowhere near a backtest.
 BOUNDS = ("cvar_lp_bound",)
 
+#: Benchmarks that sit outside the constraint set on purpose. A single-asset
+#: reference cannot hold eight names capped at twenty per cent and is not supposed
+#: to: the point of it is to say what doing nothing clever would have earned. The
+#: paper has to say so where these are introduced, and any check on feasibility has
+#: to leave them alone.
+UNCONSTRAINED = ("single",)
+
 #: Allocators whose answer depends on the seed and therefore need repeated runs.
 STOCHASTIC = ("random", *EVOLUTIONARY)
 
