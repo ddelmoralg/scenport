@@ -1,0 +1,21 @@
+\begin{table}
+\caption{Decision displacement and realised performance per generator. Reading: decision moves and performance follows.}
+\label{tab:sensitivity}
+\begin{tabular}{lrrrrrrr}
+\toprule
+forecaster & displacement & overlap & displacement\_over\_noise & displacement\_seed\_averaged & sharpe & ann\_return & objective\_gap \\
+\midrule
+prophet\_rmse & 1.011 & 0.398 & 8.497 & 1.007 & 0.443 & 0.072 & -0.021 \\
+prophet & 0.995 & 0.401 & 8.364 & 0.991 & 0.507 & 0.128 & -0.019 \\
+lgbm & 0.942 & 0.425 & 7.916 & 0.937 & 0.605 & 0.217 & -0.011 \\
+ets & 0.806 & 0.507 & 6.776 & 0.793 & 0.660 & 0.269 & -0.009 \\
+rw\_nodrift & 0.757 & 0.538 & 6.363 & 0.742 & 0.669 & 0.279 & 0.003 \\
+garch & 0.751 & 0.526 & 6.314 & 0.740 & 0.574 & 0.197 & -0.002 \\
+transformer & 0.712 & 0.556 & 5.985 & 0.701 & 0.876 & 0.487 & 0.009 \\
+lstm & 0.687 & 0.563 & 5.779 & 0.675 & 0.725 & 0.328 & 0.010 \\
+deepar & 0.674 & 0.575 & 5.664 & 0.660 & 0.576 & 0.195 & 0.011 \\
+rw & 0.645 & 0.583 & 5.424 & 0.633 & 0.755 & 0.360 & 0.017 \\
+arima & 0.641 & 0.587 & 5.389 & 0.627 & 0.665 & 0.272 & 0.012 \\
+\bottomrule
+\end{tabular}
+\end{table}

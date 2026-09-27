@@ -1,0 +1,9 @@
+{
+  "noise_floor_l1": 0.1189571049082816,
+  "mean_displacement": 0.7837207569812089,
+  "mean_displacement_over_noise": 6.588263539075483,
+  "displacement_spread": 0.1376557302530307,
+  "sharpe_spread": 0.12009483712726991,
+  "n_generators": 11,
+  "reading": "decision moves and performance follows"
+}
