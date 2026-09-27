@@ -59,9 +59,13 @@ echo "exact           : $exact"
 agg=$(sbatch --parsable     --dependency="afterok:${bt}:${bt_ea}:${exact},afterany:${abl}"     slurm/50_aggregate.sh)
 echo "aggregate       : $agg"
 
-pub=$(sbatch --parsable --dependency="afterok:${agg}" slurm/60_publish.sh)
-echo "publish         : $pub"
+echo
+echo "The publish step is not in the chain. The compute nodes on this cluster"
+echo "cannot resolve github.com, so 60_publish.sh spends five retries failing."
+echo "Once squeue is empty, from the login node:"
+echo
+echo "    bash scripts/publish.sh"
 
 echo
 echo "watch:   squeue -u \$USER -o '%.10i %.14j %.9P %.8T %.10M %R'"
-echo "cancel:  scancel $fc_cpu $fc_gpu $bt $bt_ea $abl $exact $agg $pub"
+echo "cancel:  scancel $fc_cpu $fc_gpu $bt $bt_ea $abl $exact $agg"
