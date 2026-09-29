@@ -76,7 +76,7 @@
   ],
   "w_max": 0.2,
   "w_min": 0.02,
-  "cardinality": 45,
+  "cardinality": 15,
   "cvar_alpha": 0.95,
   "gamma": 0.5,
   "cost_rate": 0.002,

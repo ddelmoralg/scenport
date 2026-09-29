@@ -44,6 +44,23 @@ the instance name, the objective value and how you got it.
     data = np.load("name.npz")
     R, w_prev = data["scenarios"], data["w_prev"]
 
+## What it covers, and what it does not
+
+The `generators` family is at the point-in-time universe size, which is fifteen.
+The `scale` family goes as far as the price panel allows, and that is the binding
+limit: the panel holds 76 assets, of which about 71 carry a market capitalisation
+on any given date, so instances stop around seventy. The OR-Library reaches 225.
+
+That ceiling is the data source rather than the code. Price and market
+capitalisation come from the Coin Metrics Community tier, which serves both
+metrics for 87 assets; a licensed tier would lift it and the export takes the
+larger universe without changes.
+
+So this set is more varied than what came before it and not yet larger. Every
+instance carries the scenario matrix rather than moments, which is the part that
+makes gaps comparable at all, and eleven fitted generators give eleven different
+tail and dependence structures over the same assets and the same dates.
+
 ## Why this set exists
 
 The OR-Library portfolio files, which is what this problem class has been
