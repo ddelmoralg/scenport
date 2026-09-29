@@ -1,6 +1,6 @@
 {
   "alpha": 0.05,
-  "replications": 120,
+  "replications": 2000,
   "n_dates": 85,
   "n_generators": 11,
   "measured_on_the_real_panel": {

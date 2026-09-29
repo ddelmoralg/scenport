@@ -150,6 +150,16 @@ def main() -> int:
         for name, (skew, rho) in REAL.items()
     ]
 
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    def flush() -> None:
+        # Written after every cell. This takes an hour at a useful replication
+        # count, and the first version of it was killed by a wall clock with the
+        # table already on screen and nothing on disk, which left a stale file
+        # from an earlier buggy run looking current.
+        pd.DataFrame(rows).to_csv(out, index=False)
+
     for label, sigma, rho in grid:
         c, p = rejection_rates(0.0, sigma, rho, args.reps, 11, args.permutations)
         log.info("%-34s %10.1f%% %12.1f%%", label, 100 * c, 100 * p)
@@ -160,8 +170,11 @@ def main() -> int:
                 "rho": rho,
                 "clustered_size": c,
                 "permutation_size": p,
+                "replications": args.reps,
+                "skew": float((np.exp(sigma**2) + 2) * np.sqrt(max(np.exp(sigma**2) - 1, 0.0))),
             }
         )
+        flush()
 
     log.info("")
     log.info("Power, symmetric and independent, so size is not the binding issue:")
@@ -175,13 +188,13 @@ def main() -> int:
                 "rho": 0.0,
                 "clustered_size": c,
                 "permutation_size": p,
+                "replications": args.reps // 2,
+                "skew": 0.0,
             }
         )
+        flush()
 
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    frame = pd.DataFrame(rows)
-    frame.to_csv(out, index=False)
+    flush()
     (out.with_suffix(".json")).write_text(
         json.dumps(
             {

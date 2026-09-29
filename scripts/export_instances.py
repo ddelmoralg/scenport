@@ -310,9 +310,15 @@ def family_constraints(args, cfg, out, panel_dir, runs_dir) -> int:
     for key, value in variations:
         kwargs = dict(base)
         kwargs[key] = value
+        # The cap and the cardinality have to multiply to at least one or the
+        # portfolio cannot be fully invested and the instance has no feasible
+        # point. Whichever of the two is being varied, the other follows.
         if key == "cardinality":
-            # w_max has to admit a feasible fully invested portfolio at this K.
             kwargs["w_max"] = max(base["w_max"], 1.05 / value)
+        elif key == "w_max" and base["cardinality"] is not None:
+            needed = int(np.ceil(1.0 / value))
+            if needed > base["cardinality"]:
+                kwargs["cardinality"] = needed + 2
         try:
             problem = Problem(scenarios=terminal, assets=list(assets), **kwargs)
         except ValueError as exc:

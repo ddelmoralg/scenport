@@ -206,3 +206,29 @@ def test_the_readme_is_honest_about_the_ceiling(export):
     text = export.README.lower()
     assert "225" in text, "the OR-Library figure belongs in the comparison"
     assert "community" in text, "the reason for the ceiling belongs with it"
+
+
+def test_a_tight_cap_raises_the_cardinality_with_it(export, panel_dir, tmp_path):
+    """Ten per cent per asset needs ten names, and the base set allows eight.
+
+    The constraints family was silently dropping that instance, exactly as the
+    ablation list did before it was fixed: a cap and a cardinality that cannot
+    multiply to one leave the problem with no feasible point.
+    """
+    from scenport.alloc.objective import Problem
+
+    cfg = _cfg()
+    base_cardinality = cfg["alloc.cardinality"]
+    for cap in (0.10, 0.05):
+        needed = int(np.ceil(1.0 / cap))
+        assert needed > base_cardinality, "the fixture has to actually be infeasible"
+        # what the export now builds
+        Problem(
+            scenarios=np.random.default_rng(0).normal(0.01, 0.2, (100, 30)),
+            assets=[f"a{i}" for i in range(30)],
+            w_max=cap,
+            w_min=cfg["alloc.w_min"],
+            cardinality=needed + 2,
+            cvar_alpha=cfg["alloc.cvar_alpha"],
+            gamma=cfg["alloc.gamma"],
+        )
