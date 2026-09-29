@@ -154,3 +154,55 @@ def test_the_readme_says_why_the_set_exists(export):
     assert "moments" in export.README.lower() or "correlation" in export.README.lower()
     assert "best_known" in export.README
     assert "proven" in export.README
+
+
+def test_every_generator_in_the_study_is_in_the_library(export):
+    """It held ten while the study had eleven, and rw_nodrift was simply absent."""
+    import argparse
+
+    from scenport.plots import style
+
+    parser = argparse.ArgumentParser()
+    # rebuild the default the same way main() does
+    default = list(style.FORECASTER_ORDER)
+    assert len(default) == 11
+    assert "rw_nodrift" in default
+    del parser
+
+
+def test_an_oversized_request_clamps_instead_of_vanishing(export, panel_dir, tmp_path):
+    """A scaling library wants its largest feasible instance, not a gap at the top."""
+    out = tmp_path / "instances"
+    out.mkdir()
+
+    class Oversized(_Args):
+        sizes = [50, 5000]          # the second cannot be filled
+        scenario_counts = [200]
+
+    written = export.family_scale(Oversized(), _cfg(), out, panel_dir)
+    assert written == 2, "both requests should produce an instance"
+
+    sizes = sorted(
+        json.loads(p.read_text(encoding="utf-8"))["n_assets"] for p in out.glob("*.json")
+    )
+    assert sizes[0] == 50
+    assert sizes[1] > 50, "the oversized request clamps to what the panel holds"
+
+
+def test_requests_that_clamp_to_the_same_size_are_written_once(export, panel_dir, tmp_path):
+    out = tmp_path / "instances"
+    out.mkdir()
+
+    class Duplicated(_Args):
+        sizes = [4000, 5000, 6000]   # all clamp to the same achievable size
+        scenario_counts = [200]
+
+    written = export.family_scale(Duplicated(), _cfg(), out, panel_dir)
+    assert written == 1, "three impossible sizes should not write the same instance thrice"
+
+
+def test_the_readme_is_honest_about_the_ceiling(export):
+    """A library smaller than the one it complements has to say so."""
+    text = export.README.lower()
+    assert "225" in text, "the OR-Library figure belongs in the comparison"
+    assert "community" in text, "the reason for the ceiling belongs with it"

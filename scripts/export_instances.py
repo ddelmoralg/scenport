@@ -48,6 +48,7 @@ from scenport.alloc.objective import Problem  # noqa: E402
 from scenport.data.panel import Panel  # noqa: E402
 from scenport.data.universe import read as read_universe  # noqa: E402
 from scenport.forecast.store import ScenarioStore  # noqa: E402
+from scenport.plots import style  # noqa: E402
 
 log = logging.getLogger("export")
 
@@ -99,6 +100,23 @@ the instance name, the objective value and how you got it.
     head = json.load(open("name.json"))
     data = np.load("name.npz")
     R, w_prev = data["scenarios"], data["w_prev"]
+
+## What it covers, and what it does not
+
+The `generators` family is at the point-in-time universe size, which is fifteen.
+The `scale` family goes as far as the price panel allows, and that is the binding
+limit: the panel holds 76 assets, of which about 71 carry a market capitalisation
+on any given date, so instances stop around seventy. The OR-Library reaches 225.
+
+That ceiling is the data source rather than the code. Price and market
+capitalisation come from the Coin Metrics Community tier, which serves both
+metrics for 87 assets; a licensed tier would lift it and the export takes the
+larger universe without changes.
+
+So this set is more varied than what came before it and not yet larger. Every
+instance carries the scenario matrix rather than moments, which is the part that
+makes gaps comparable at all, and eleven fitted generators give eleven different
+tail and dependence structures over the same assets and the same dates.
 
 ## Why this set exists
 
@@ -216,7 +234,15 @@ def _historical_instance(panel: Panel, cfg, date, size, n_scenarios, rng, base) 
     liquid = panel.mcap.loc[date].dropna().sort_values(ascending=False)
     assets = [a for a in liquid.index[: size * 3] if history[a].notna().sum() > 400][:size]
     if len(assets) < size:
-        log.warning("only %d assets with enough history for a universe of %d", len(assets), size)
+        # Clamp rather than skip. Skipping left the library with a gap at the top
+        # instead of its largest feasible instance, which is the one a scaling
+        # study most wants. The panel here holds 76 assets and 71 carry a market
+        # capitalisation on a given date, so anything past about 70 is the data
+        # talking, not the code.
+        log.warning(
+            "universe of %d requested, %d assets available; exporting at %d",
+            size, len(assets), len(assets),
+        )
         if len(assets) < 10:
             return None
 
@@ -234,12 +260,18 @@ def family_scale(args, cfg, out, panel_dir) -> int:
     base = _base_kwargs(cfg)
     written = 0
 
+    seen: set[tuple[int, int]] = set()
     for size in args.sizes:
         for n_scenarios in args.scenario_counts:
             rng = np.random.default_rng(cfgmod.stable_seed("scale", size, n_scenarios))
             instance = _historical_instance(panel, cfg, date, size, n_scenarios, rng, base)
             if instance is None:
                 continue
+            # Several requested sizes clamp to the same achievable one, so only
+            # the first of them is written.
+            if (instance.n, n_scenarios) in seen:
+                continue
+            seen.add((instance.n, n_scenarios))
             # The cardinality has to grow with the universe or every large instance
             # is the same tiny selection problem wearing a bigger hat.
             instance.cardinality = max(cfg["alloc.cardinality"], int(round(size * 0.2)))
@@ -308,10 +340,10 @@ def main() -> int:
     parser.add_argument("--config", default="configs/base.yaml")
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--families", nargs="+", default=list(FAMILIES), choices=FAMILIES)
-    parser.add_argument("--generators", nargs="+", default=[
-        "rw", "arima", "ets", "garch", "prophet", "prophet_rmse", "lgbm",
-        "lstm", "deepar", "transformer",
-    ])
+    # All eleven. The list used to hold ten and rw_nodrift was quietly absent
+    # from the library while being in every other table, which is the kind of
+    # gap nobody notices until someone downloads the set and counts.
+    parser.add_argument("--generators", nargs="+", default=list(style.FORECASTER_ORDER))
     parser.add_argument("--forecast-seed", type=int, default=0)
     parser.add_argument("--every", type=int, default=6)
     parser.add_argument("--n-dates", type=int, default=4)
