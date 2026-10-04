@@ -12,6 +12,7 @@ import pytest
 from scenport.alloc.objective import (
     cvar,
     decode,
+    feasible_cardinality,
     is_feasible,
     project_simplex_box,
     report,
@@ -112,3 +113,50 @@ def test_cost_reduces_the_objective(scenarios):
     costly = Problem(scenarios=scenarios, assets=assets, w_prev=previous, cost_rate=0.01)
     w = np.full(len(assets), 1.0 / len(assets))
     assert score(w, costly)[0] < score(w, free)[0]
+
+
+# The cardinality has to agree with the weight bounds, and three separate places
+# have got that wrong: an ablation asked for eight names under a ten per cent cap
+# and could only ever invest eighty per cent, the instance exporter hit the same
+# thing from the other side, and the scaling sweep asked for sixty-six names at a
+# two per cent floor. The arithmetic is in one function now, so it is tested once.
+
+
+def test_cardinality_is_raised_when_the_cap_cannot_fill_the_budget():
+    # Eight names at ten per cent each reach 0.8. Ten is the smallest that works.
+    assert feasible_cardinality(8, 70, 0.02, 0.10) == 10
+
+
+def test_cardinality_is_capped_when_the_floor_will_not_fit():
+    # Sixty-six names at two per cent each need 1.32 of a budget of 1.
+    assert feasible_cardinality(66, 70, 0.02, 0.20) == 50
+
+
+def test_cardinality_never_exceeds_the_universe():
+    assert feasible_cardinality(100, 15, 0.02, 0.20) == 15
+
+
+def test_the_paper_configuration_is_left_alone():
+    # K = 8 with weights in [0.02, 0.2] is feasible, so nothing should move.
+    assert feasible_cardinality(8, 70, 0.02, 0.20) == 8
+
+
+def test_impossible_bounds_raise_rather_than_round():
+    with pytest.raises(ValueError, match="no cardinality works"):
+        feasible_cardinality(8, 5, 0.02, 0.10)
+
+
+def test_every_returned_cardinality_admits_a_portfolio(rng):
+    for _ in range(200):
+        n = int(rng.integers(5, 80))
+        w_min = float(rng.uniform(0.005, 0.05))
+        w_max = float(rng.uniform(max(w_min * 2, 1.0 / n), 0.5))
+        try:
+            k = feasible_cardinality(int(rng.integers(1, n + 1)), n, w_min, w_max)
+        except ValueError:
+            continue
+        assert 1 <= k <= n
+        # Feasibility of a k-name portfolio is exactly these two inequalities.
+        assert k * w_min <= 1.0 + 1e-12
+        assert k * w_max >= 1.0 - 1e-12
+        project_simplex_box(np.full(k, 1.0 / k), w_min, w_max)

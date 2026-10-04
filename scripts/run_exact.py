@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scenport import alloc  # noqa: E402
 from scenport import config as cfgmod
 from scenport.alloc.exact import MilpExact, subsample  # noqa: E402
-from scenport.alloc.objective import Problem, score  # noqa: E402
+from scenport.alloc.objective import Problem, feasible_cardinality, score  # noqa: E402
 from scenport.data.panel import Panel  # noqa: E402
 from scenport.data.universe import read as read_universe  # noqa: E402
 from scenport.forecast.store import ScenarioStore  # noqa: E402
@@ -146,12 +146,41 @@ def scaling(args, cfg, root) -> pd.DataFrame:
     rng = np.random.default_rng(args.seed)
     rows = []
 
+    # One untimed solve first. The first call in a process pays for importing the
+    # solver and building its data structures, and without this the smallest
+    # universe came out an order of magnitude slower than the next one up, which
+    # reads as a scaling result and is not one.
+    warm = Problem(
+        scenarios=rng.normal(0.0, 0.05, (64, 8)),
+        assets=[f"warmup{i}" for i in range(8)],
+        cost_rate=0.0,
+        **problem_kwargs(cfg),
+    )
+    for name in ["milp", *args.allocator]:
+        warm_alloc = (
+            MilpExact(max_scenarios=args.max_scenarios, time_limit=args.time_limit)
+            if name == "milp"
+            else alloc.get(name)
+        )
+        try:
+            warm_alloc(warm, np.random.default_rng(0))
+        except Exception as exc:                                  # noqa: BLE001
+            log.warning("warm-up for %s failed: %s", name, exc)
+
+    seen: set[int] = set()
     for size in args.sizes:
         assets = [a for a in liquid.index[: size * 3] if history[a].notna().sum() > 400][:size]
         if len(assets) < size:
-            log.warning("only %d assets available for a universe of %d", len(assets), size)
-            if len(assets) < 5:
-                continue
+            # The panel runs out at about seventy names. Asking for more used to
+            # run the sweep again on the same seventy and label the row with the
+            # achieved size, so the file held four different experiments all
+            # called n=70 and the figure drew a vertical line through them.
+            log.warning("only %d assets available for a universe of %d; skipping",
+                        len(assets), size)
+            continue
+        if len(assets) in seen:
+            continue
+        seen.add(len(assets))
 
         # Historical horizon returns stand in for a forecast here: the point of the
         # experiment is solver behaviour as n grows, not forecast quality.
@@ -162,7 +191,19 @@ def scaling(args, cfg, root) -> pd.DataFrame:
             scenarios=block[idx],
             assets=assets,
             cost_rate=0.0,
-            **{**problem_kwargs(cfg), "cardinality": max(cfg["alloc.cardinality"], size // 3)},
+            **{
+                **problem_kwargs(cfg),
+                # A third of the universe, but the weight bounds have the last
+                # word: sixty-six names at a two per cent floor needs 132% of the
+                # capital, which is how this sweep used to produce eight rows of
+                # ValueError that the figure then plotted as solve times.
+                "cardinality": feasible_cardinality(
+                    max(cfg["alloc.cardinality"], size // 3),
+                    len(assets),
+                    problem_kwargs(cfg)["w_min"],
+                    problem_kwargs(cfg)["w_max"],
+                ),
+            },
         )
 
         for name in ["milp", *args.allocator]:

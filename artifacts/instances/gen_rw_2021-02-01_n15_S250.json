@@ -29,6 +29,6 @@
   "family": "generators",
   "generator": "rw",
   "rebalance_date": "2021-02-01",
-  "best_known": 0.06693867951328647,
-  "proven": false
+  "best_known": 0.06579327587931254,
+  "proven": true
 }

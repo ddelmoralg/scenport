@@ -24,8 +24,8 @@ def _lightgbm_usable() -> bool:
 
     On some Windows installations LightGBM's OpenMP runtime clashes with the one
     already loaded by pandas, and the first Dataset construction dies with an
-    access violation. It has nothing to do with this package -- the same failure
-    reproduces in four lines of plain LightGBM -- but it should be reported as an
+    access violation. It has nothing to do with this package, and the same failure
+    reproduces in four lines of plain LightGBM, but it should be reported as an
     environment problem rather than as a broken forecaster.
     """
     try:
@@ -124,7 +124,7 @@ def test_the_two_random_walks_differ_exactly_by_the_drift(history, rng):
     """Centring happens on log returns, so the driftless walk has none there.
 
     Its *mean simple* return stays slightly positive by Jensen's inequality, which
-    is correct behaviour and not something to test away -- hence the check on log
+    is correct behaviour and not something to test away, hence the check on log
     returns.
     """
     historical = np.diff(np.log(history.to_numpy(float)), axis=0).mean(axis=0)

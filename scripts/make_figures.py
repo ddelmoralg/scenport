@@ -18,11 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scenport import config as cfgmod  # noqa: E402
 from scenport.backtest import metrics  # noqa: E402
+from scenport.plots import paper as paperfigs  # noqa: E402
 from scenport.plots import style  # noqa: E402
 
 log = logging.getLogger("figures")
 
-FIGURES = ("nav", "transmission", "calibration", "scaling", "convergence", "regimes")
+FIGURES = ("displacement", "gaps", "transmission", "scaling",
+           "calibration", "nav", "convergence", "regimes")
 
 
 def _daily(runs: Path) -> pd.DataFrame:
@@ -35,8 +37,11 @@ def _daily(runs: Path) -> pd.DataFrame:
 
 
 def _mean_over_seeds(daily: pd.DataFrame, forecaster: str, allocator: str) -> pd.Series:
-    """Average the daily returns across seeds -- the portfolio a user would get
-    if they had no way to pick the lucky seed in advance."""
+    """Average the daily returns across seeds.
+
+    This is the portfolio a user would get if they had no way to pick the lucky
+    seed in advance.
+    """
     cols = [c for c in daily.columns if c.startswith(f"{forecaster}|{allocator}|")]
     return daily[cols].mean(axis=1) if cols else pd.Series(dtype=float)
 
@@ -83,60 +88,6 @@ def fig_nav(runs: Path, artifacts: Path, cfg, headline: str, allocator: str):
     return style.save(fig, artifacts, "nav")
 
 
-def fig_transmission(artifacts: Path):
-    """The headline: forecast quality on the x axis, portfolio Sharpe on the y.
-
-    Two panels, one for point accuracy and one for distributional accuracy, on
-    identical y scales so the two slopes can be compared by eye. Every point is
-    labelled -- with eleven forecasters a legend would be unreadable and the
-    identity of the outliers is the interesting part.
-    """
-    import matplotlib.pyplot as plt
-
-    quality = pd.read_csv(artifacts / "forecast_quality.csv")
-    cross = pd.read_csv(artifacts / "transmission_cross.csv")
-    main = pd.read_csv(artifacts / "main.csv")
-
-    reference = main[main["allocator"] == "ga"].set_index("forecaster")["sharpe"]
-    merged = quality.set_index("forecaster").join(reference.rename("sharpe")).dropna(
-        subset=["sharpe"]
-    )
-
-    panels = [("mase", "Point accuracy (MASE, lower is better)"),
-              ("crps", "Distributional accuracy (CRPS, lower is better)")]
-    fig, axes = plt.subplots(1, 2, figsize=(style.TWO_COL, 3.2), sharey=True)
-
-    for ax, (column, xlabel) in zip(axes, panels, strict=True):
-        if column not in merged:
-            continue
-        for name, row in merged.iterrows():
-            spec = style.style_for(name, style.FORECASTER_ORDER)
-            ax.scatter(row[column], row["sharpe"], s=34, color=spec["color"],
-                       marker=spec["marker"], zorder=3, edgecolor="white", linewidth=0.6)
-            ax.annotate(style.label(name), (row[column], row["sharpe"]),
-                        xytext=(4, 3), textcoords="offset points", fontsize=6.8,
-                        color=style.MUTED)
-
-        good = merged[[column, "sharpe"]].dropna()
-        if len(good) > 2:
-            slope, intercept = np.polyfit(good[column], good["sharpe"], 1)
-            xs = np.linspace(good[column].min(), good[column].max(), 20)
-            ax.plot(xs, slope * xs + intercept, color=style.REFERENCE, linewidth=1.0,
-                    linestyle="--", zorder=1)
-            row = cross[cross["score"] == column]
-            if len(row):
-                ax.set_title(
-                    rf"Spearman $\rho$ = {row['spearman_vs_sharpe'].iloc[0]:.2f}"
-                    rf"  ($p$ = {row['p_value'].iloc[0]:.2f})",
-                    color=style.MUTED,
-                )
-        ax.set_xlabel(xlabel)
-
-    axes[0].set_ylabel("Out-of-sample Sharpe ratio")
-    fig.tight_layout()
-    return style.save(fig, artifacts, "transmission")
-
-
 def fig_calibration(runs: Path, artifacts: Path):
     """PIT histograms. Flat means honest; a U shape means the intervals are too
     narrow, a hump in the middle means they are too wide."""
@@ -174,7 +125,14 @@ def fig_calibration(runs: Path, artifacts: Path):
 
 
 def fig_scaling(runs: Path, artifacts: Path):
-    """Solve time against universe size: where branch and bound stops finishing."""
+    """Solve time against universe size: where branch and bound stops finishing.
+
+    Only the methods that answer the constrained problem are drawn. The earlier
+    version plotted all nine allocators and the end labels landed on top of one
+    another; dropping the weightings that do no optimisation fixes that and
+    costs nothing, because their cost does not depend on the universe size in a
+    way anyone needs a figure for.
+    """
     import matplotlib.pyplot as plt
 
     path = runs / "exact" / "scaling.parquet"
@@ -183,21 +141,35 @@ def fig_scaling(runs: Path, artifacts: Path):
         return None
     frame = pd.read_parquet(path)
 
-    fig, ax = plt.subplots(figsize=(style.TWO_COL, 3.2))
-    for name, group in frame.groupby("allocator"):
-        group = group.sort_values("n_assets")
+    # A run that raised has a timing and no objective, and plotting that timing
+    # says a solver answered in a millisecond when it in fact fell over.
+    failed = frame["status"].astype(str).str.startswith("failed")
+    if failed.any():
+        log.warning("dropping %d failed runs from the scaling figure", int(failed.sum()))
+        frame = frame[~failed]
+
+    keep = ("milp", "cvar_lp", "ga", "de", "pso", "cmaes")
+    frame = frame[frame["allocator"].isin(keep)]
+    # One point per size even if the sweep was run more than once.
+    frame = frame.groupby(["allocator", "n_assets"], as_index=False)["seconds"].median()
+
+    fig, ax = plt.subplots(figsize=(style.TWO_COL, 3.0))
+    for name in keep:
+        group = frame[frame["allocator"] == name].sort_values("n_assets")
+        if group.empty:
+            continue
         spec = style.style_for(name, style.ALLOCATOR_ORDER)
         if name == "milp":
             spec = {"color": style.INK, "linestyle": "-", "marker": "o",
                     "linewidth": 2.0, "markersize": 5}
         ax.plot(group["n_assets"], group["seconds"], label=style.label(name), **spec)
-        style.annotate_last(ax, group["n_assets"].iloc[-1], group["seconds"].iloc[-1],
-                            style.label(name), spec["color"])
 
     ax.set_yscale("log")
     ax.set_xlabel("Universe size (number of assets)")
     ax.set_ylabel("Wall-clock time per instance (s)")
-    ax.legend(loc="upper left", ncol=2)
+    # Outside the axes. With a log y axis spanning five decades there is no
+    # corner left that does not sit on a line.
+    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), fontsize=8)
     return style.save(fig, artifacts, "scaling")
 
 
@@ -280,7 +252,9 @@ def main() -> int:
     builders = {
         "nav": lambda: fig_nav(runs, artifacts, cfg, args.headline_forecaster,
                                args.headline_allocator),
-        "transmission": lambda: fig_transmission(artifacts),
+        "displacement": lambda: paperfigs.fig_displacement(artifacts),
+        "gaps": lambda: paperfigs.fig_gaps(artifacts),
+        "transmission": lambda: paperfigs.fig_transmission(artifacts),
         "calibration": lambda: fig_calibration(runs, artifacts),
         "scaling": lambda: fig_scaling(runs, artifacts),
         "convergence": lambda: fig_convergence(runs, artifacts),

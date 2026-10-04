@@ -98,7 +98,7 @@ class RiskParity(Allocator):
     Minimising ``0.5 w'Sw - (1/n) sum log w_i`` over the positive orthant has the
     equal-risk-contribution portfolio as its unique solution up to scale (Spinu).
     The per-asset cap is applied afterwards by projection, so the cap can break
-    exact parity -- that is reported rather than hidden.
+    exact parity, and that is reported rather than hidden.
     """
 
     name = "riskparity"
@@ -136,8 +136,8 @@ class HierarchicalRiskParity(Allocator):
     """Lopez de Prado's HRP: cluster, quasi-diagonalise, bisect recursively.
 
     Never inverts the covariance matrix, which is why it holds up when the
-    correlation structure is close to singular -- a routine situation in crypto,
-    where most tokens track bitcoin.
+    correlation structure is close to singular, which is routine in crypto, where
+    most tokens track bitcoin.
     """
 
     name = "hrp"

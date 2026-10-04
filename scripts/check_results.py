@@ -296,6 +296,34 @@ def check_sensitivity(artifacts: Path, report: Report) -> None:
         )
 
 
+
+def check_no_silent_failures(runs: Path, report: Report) -> None:
+    """A run that raised still writes a row, with a timing and no objective.
+
+    The scaling sweep produced eight of those and nothing said so. They carried
+    a plausible-looking wall-clock time, so the figure drew them as if four
+    metaheuristics had solved a seventy-asset instance in a millisecond. A
+    failure is allowed to happen; going unmentioned is not.
+    """
+    log.info("failed runs")
+    found = False
+    for path in sorted(runs.rglob("*.parquet")):
+        frame = pd.read_parquet(path)
+        if "status" not in frame:
+            continue
+        bad = frame["status"].astype(str).str.startswith("failed")
+        if bad.any():
+            found = True
+            reasons = sorted(set(frame.loc[bad, "status"]))
+            report.check(
+                False,
+                f"{path.name}: {int(bad.sum())} of {len(frame)} rows failed "
+                f"({', '.join(reasons)})",
+            )
+    if not found:
+        report.check(True, "no run recorded a failure")
+
+
 def check_cvar_forms_agree(cfg, report: Report) -> None:
     """The two CVaR implementations have to coincide, or the gaps mean nothing.
 
@@ -366,6 +394,7 @@ def main() -> int:
     check_nothing_beats_the_optimum(runs, report)
     check_feasibility(runs, cfg, report)
     check_sensitivity(artifacts, report)
+    check_no_silent_failures(runs, report)
 
     log.info("")
     if report.warnings:

@@ -52,7 +52,7 @@ class MarketCap(Allocator):
 
 @register
 class Random(Allocator):
-    """Uniform random weights -- the "monkey" benchmark.
+    """Uniform random weights, the "monkey" benchmark.
 
     Stochastic, so it gets the same treatment as the search allocators: many
     draws, and the proposal is reported as a percentile of the distribution
@@ -71,8 +71,8 @@ class InverseVolatility(Allocator):
     """Weights proportional to 1/sigma_i, with sigma taken from the scenarios.
 
     Uses only the diagonal of the scenario covariance, so it is the cheapest way
-    to react to a forecast at all -- useful for separating "the forecast helped"
-    from "the optimiser helped".
+    to react to a forecast at all. That separates "the forecast helped" from "the
+    optimiser helped".
     """
 
     name = "invvol"

@@ -29,6 +29,6 @@
   "family": "generators",
   "generator": "arima",
   "rebalance_date": "2020-08-01",
-  "best_known": 0.006388228873057513,
-  "proven": false
+  "best_known": 0.0043121816919894935,
+  "proven": true
 }

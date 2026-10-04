@@ -230,7 +230,7 @@ class DeepScenarios(ScenarioForecaster):
     def simulate_one(self, history, horizon, n_paths, rng):     # pragma: no cover
         raise NotImplementedError("deep forecasters are global; use simulate()")
 
-    # -- internals ----------------------------------------------------------
+    # internals
 
     def _fit(self, series: dict, device, seed: int):
         torch = _torch()

@@ -1,6 +1,6 @@
 """Cross-asset dependence, imposed after the fact by rank reordering.
 
-Independent marginals would be badly wrong here -- pairwise correlations across the
+Independent marginals would be badly wrong here. Pairwise correlations across the
 large cryptoassets sit well above 0.7, so an uncoupled scenario set makes
 diversification look free. Iman and Conover (1982) permute each asset's paths to
 match a target rank structure while leaving every marginal exactly as it was.

@@ -90,7 +90,7 @@ class ScenarioSet:
     def covariance(self) -> np.ndarray:
         """(n, n) covariance of horizon returns.
 
-        Of the *horizon* return, not of daily returns -- everything in this package
+        Of the *horizon* return, not of daily returns. Everything in this package
         stays on the holding-period scale.
         """
         return np.cov(self.terminal(), rowvar=False, ddof=1)

@@ -180,11 +180,28 @@ def _known_bounds(runs_dir: Path) -> dict:
     if not path.exists():
         return solved
     gaps = pd.read_parquet(path)
-    best = gaps.groupby(["rebalance", "allocator"])["objective"].max().unstack()
+
+    # cvar_lp_bound is the continuous relaxation. It is an upper bound on the
+    # constrained optimum and no feasible portfolio attains it, so taking the
+    # maximum over every allocator shipped the relaxation value as `best_known`
+    # and, because the relaxation always won, `proven` came out false on every
+    # instance in the library.
+    feasible = gaps[gaps["allocator"] != "cvar_lp_bound"]
+    best = feasible.groupby(["rebalance", "allocator"])["objective"].max().unstack()
+
+    # Proven means the solver closed the gap and said so, which is recorded in
+    # the status column. Whether milp happens to hold the largest objective is a
+    # different question and the two came apart at nine decimal places.
+    closed = set(
+        pd.Timestamp(d)
+        for d, st in gaps.loc[gaps["allocator"] == "milp", ["rebalance", "status"]].values
+        if str(st) == "optimal"
+    )
     for date, row in best.iterrows():
-        solved[pd.Timestamp(date)] = {
+        stamp = pd.Timestamp(date)
+        solved[stamp] = {
             "best_known": float(row.max()),
-            "proven": bool("milp" in row.index and row.idxmax() == "milp"),
+            "proven": stamp in closed,
         }
     return solved
 
@@ -390,6 +407,11 @@ def main() -> int:
 
     manifest = []
     for path in sorted(out.glob("*.json")):
+        # Skip the index itself. The glob used to pick up the previous run's
+        # index.json and append the whole list as a single entry, so the file
+        # ended up holding 105 instances plus one nested list of 97 more.
+        if path.name == "index.json":
+            continue
         manifest.append(json.loads(path.read_text(encoding="utf-8")))
     (out / "index.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return 0

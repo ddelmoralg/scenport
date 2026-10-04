@@ -3,7 +3,7 @@
     max  (1-g) E[r] - g CVaR_a(r) - c ||w - w_prev||_1
     s.t. sum(w) = 1,  0 <= w_i <= w_max,  w_i in {0} u [w_min, w_max],  ||w||_0 <= K
 
-evaluated directly on the scenario matrix -- no expected-return vector, no
+evaluated directly on the scenario matrix, with no expected-return vector and no
 covariance. Feasibility lives in the decoder, so every candidate the search sees is
 a portfolio somebody could hold. notes/objective.md has the reasoning.
 """
@@ -103,6 +103,32 @@ def project_simplex_box(v: np.ndarray, lo: float, hi: float, tol: float = 1e-10)
             right = mid
     w = np.clip(v + 0.5 * (left + right), lo, hi)
     return w / w.sum()
+
+
+
+def feasible_cardinality(k: int, n_assets: int, w_min: float, w_max: float) -> int:
+    """The largest cardinality at or below ``k`` that a portfolio can actually have.
+
+    A support of exactly K names needs ``K * w_min <= 1`` to fit inside the budget
+    and ``K * w_max >= 1`` to fill it. The first caps K, the second raises it, and
+    callers that build instances from a size parameter have now got this wrong in
+    both directions: an ablation asked for a 10% cap with eight names and could
+    only invest 80%, and the scaling sweep asked for 66 names at a 2% floor and
+    needed 132% of the capital. So the arithmetic lives here instead of being
+    redone at each call site.
+
+    Raises if no K in ``[1, n_assets]`` works, because that is a badly specified
+    instance rather than something to silently round away.
+    """
+    ceiling = min(n_assets, int(1.0 / w_min) if w_min > 0 else n_assets)
+    floor = int(np.ceil(1.0 / w_max)) if w_max > 0 else 1
+    if floor > ceiling:
+        raise ValueError(
+            f"no cardinality works: {n_assets} assets with weights in "
+            f"[{w_min}, {w_max}] needs at least {floor} names and allows at most "
+            f"{ceiling}"
+        )
+    return int(min(max(k, floor), ceiling))
 
 
 def decode(x: np.ndarray, problem: Problem) -> np.ndarray:

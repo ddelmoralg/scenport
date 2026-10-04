@@ -85,7 +85,7 @@ def sharpe_difference(
 ) -> TestResult:
     """Test H0: the two return series have the same Sharpe ratio.
 
-    Both series must be aligned and observed over the same dates -- they are two
+    Both series must be aligned and observed over the same dates. They are two
     strategies run on the same data, so their errors are strongly dependent and a
     two-sample t-test on the Sharpe ratios would be badly oversized.
 
@@ -197,7 +197,7 @@ def deflated_sharpe(
 
     ``observed_sharpe`` must be on the *observation* frequency, not annualised.
     ``n_trials`` is the number of configurations that were compared before this one
-    was selected -- for this study, the size of the factorial grid.
+    was selected, which for this study is the size of the factorial grid.
     """
     if sharpe_variance is None:
         # Under the null of no skill, Var(SR) across trials is 1/n_observations.

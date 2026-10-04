@@ -29,6 +29,6 @@
   "family": "generators",
   "generator": "rw_nodrift",
   "rebalance_date": "2019-08-01",
-  "best_known": -0.01682154513153598,
-  "proven": false
+  "best_known": -0.01828583775267545,
+  "proven": true
 }

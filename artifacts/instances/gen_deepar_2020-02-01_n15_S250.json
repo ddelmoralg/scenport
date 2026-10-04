@@ -29,6 +29,6 @@
   "family": "generators",
   "generator": "deepar",
   "rebalance_date": "2020-02-01",
-  "best_known": -0.01515892411486845,
-  "proven": false
+  "best_known": -0.0155448943089502,
+  "proven": true
 }
