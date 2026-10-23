@@ -4,9 +4,9 @@ Okabe-Ito palette in a fixed order, assigned by series name rather than by plott
 order, plus a line style and a marker per series so nothing depends on colour alone
 in greyscale print.
 
-The three channels cycle at coprime periods (6 colours, 5 line styles, 7 markers).
-That matters: with all three on the same period they move together and two series
-fifteen apart come out identical. `tests/test_plot_style.py` pins it.
+The three channels cycle at coprime periods (6 colours, 5 line styles, 7 markers),
+so no two of the first 210 series share all three. On a common period of six the
+first and seventh series would be identical. `tests/test_plot_style.py` pins it.
 """
 
 from __future__ import annotations

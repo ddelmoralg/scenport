@@ -1,9 +1,9 @@
 """Universe construction against partial data coverage.
 
-All three things pinned here were live bugs found while fetching the real panel.
-Market capitalisation on the free tier starts months after price does, and the
-universe builder answered that by handing back empty universes with a warning
-nobody was going to read in a cluster log.
+Market capitalisation on the free tier starts months after price does, so the
+earliest rebalancing dates have nothing to rank. The builder drops those dates,
+says so, and raises if none survive, instead of returning empty universes with
+only a log warning.
 """
 
 from __future__ import annotations

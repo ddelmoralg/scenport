@@ -181,17 +181,14 @@ def _known_bounds(runs_dir: Path) -> dict:
         return solved
     gaps = pd.read_parquet(path)
 
-    # cvar_lp_bound is the continuous relaxation. It is an upper bound on the
-    # constrained optimum and no feasible portfolio attains it, so taking the
-    # maximum over every allocator shipped the relaxation value as `best_known`
-    # and, because the relaxation always won, `proven` came out false on every
-    # instance in the library.
+    # cvar_lp_bound is the continuous relaxation, an upper bound that no feasible
+    # portfolio attains, so it cannot supply a best known objective.
     feasible = gaps[gaps["allocator"] != "cvar_lp_bound"]
     best = feasible.groupby(["rebalance", "allocator"])["objective"].max().unstack()
 
-    # Proven means the solver closed the gap and said so, which is recorded in
-    # the status column. Whether milp happens to hold the largest objective is a
-    # different question and the two came apart at nine decimal places.
+    # Proven means the exact solver reported optimality, read from the status
+    # column. Which allocator scored highest is a separate question and can
+    # disagree at the ninth decimal.
     closed = set(
         pd.Timestamp(d)
         for d, st in gaps.loc[gaps["allocator"] == "milp", ["rebalance", "status"]].values
@@ -363,9 +360,7 @@ def main() -> int:
     parser.add_argument("--config", default="configs/base.yaml")
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--families", nargs="+", default=list(FAMILIES), choices=FAMILIES)
-    # All eleven. The list used to hold ten and rw_nodrift was quietly absent
-    # from the library while being in every other table, which is the kind of
-    # gap nobody notices until someone downloads the set and counts.
+    # All eleven generators, so the library covers every one the paper reports.
     parser.add_argument("--generators", nargs="+", default=list(style.FORECASTER_ORDER))
     parser.add_argument("--forecast-seed", type=int, default=0)
     parser.add_argument("--every", type=int, default=6)
@@ -407,9 +402,8 @@ def main() -> int:
 
     manifest = []
     for path in sorted(out.glob("*.json")):
-        # Skip the index itself. The glob used to pick up the previous run's
-        # index.json and append the whole list as a single entry, so the file
-        # ended up holding 105 instances plus one nested list of 97 more.
+        # Skip the index itself, which the glob would otherwise read back in as
+        # one more entry.
         if path.name == "index.json":
             continue
         manifest.append(json.loads(path.read_text(encoding="utf-8")))

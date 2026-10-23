@@ -1,19 +1,15 @@
-"""The figures that carry the paper's three claims.
+"""The figures that carry the paper's three claims, one figure per claim.
 
-One figure per claim, and nothing drawn that the text does not argue:
+- `displacement`: swapping the generator moves the decision much further than
+  reseeding it.
+- `gaps`: the metaheuristics land close to a proven optimum, and the discrete
+  constraints are worth solving.
+- `transmission`: one diagnostic out of six survives both tests and the loss of
+  any single date.
 
-- `displacement`, that swapping the generator moves the decision much further
-  than reseeding it;
-- `gaps`, that the metaheuristics land close enough to a proven optimum to be
-  trusted, and that the discrete constraints are worth solving;
-- `transmission`, that one diagnostic out of six survives both tests and the
-  loss of any single date.
-
-The older `fig_transmission` in `scripts/make_figures.py` plotted the eleven
-generator averages against their realised Sharpe ratios. That is the
-cross-section, and Section 7 of the paper says plainly that it could not have
-found anything at n = 11. Giving it a figure argued the opposite of the text,
-so it is gone and this is what replaced it.
+The cross-section of generator averages against realised Sharpe ratios has no
+figure. With eleven points it has almost no power, and the paper gives it as a
+table for completeness.
 """
 
 from __future__ import annotations
@@ -138,8 +134,8 @@ def fig_gaps(artifacts: Path):
         plt.Line2D([], [], color=style.MUTED, marker="o", linestyle="",
                    markersize=5, markerfacecolor="white", label="Worst single date"),
     ]
-    # Below the axes. Inside, it covered the three rows at the bottom, which
-    # are the ones the figure exists to contrast against.
+    # Below the axes, so it cannot cover the bottom rows, which are the ones the
+    # figure contrasts against.
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.22),
               ncol=2, fontsize=7.5)
     fig.tight_layout()
@@ -200,8 +196,7 @@ def fig_transmission(artifacts: Path):
         plt.Line2D([], [], color=style.MUTED, marker="D", linestyle="",
                    markersize=6, markerfacecolor="white", label="Permutation"),
     ]
-    # Under both panels. Anywhere inside the left one lands on a row, and the
-    # row it landed on was the only one that matters.
+    # Under both panels. Inside the left one it would sit on a row.
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.04),
                ncol=2, fontsize=7.5)
     fig.tight_layout()

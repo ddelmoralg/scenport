@@ -269,31 +269,21 @@ def _portfolio_exposure(runs: Path, panel_dir: Path, allocator: str) -> pd.DataF
     )
 
 
-def _transmission_panel(
+def build_transmission_panel(
     per_asset: pd.DataFrame,
     joint: pd.DataFrame,
     runs: Path,
     allocator: str,
     panel_dir: Path | None = None,
-) -> pd.DataFrame:
-    """Within-date regression of period return on forecast quality.
+) -> tuple[pd.DataFrame, bool]:
+    """The forecaster-date panel that the transmission regression runs on.
 
-    The unit is the forecaster-date pair, not the forecaster. Eleven forecasters
-    give eleven points and a correlation on eleven points cannot resolve anything
-    below about 0.76, which is reported in the cross-sectional table. Here the same
-    eleven give several hundred observations across the rebalancing calendar.
+    One row per forecaster and rebalancing date, with the realised net return of
+    the reference allocator and the six diagnostics. Market exposure joins as a
+    control where the weights are available: a forecaster that held less of the
+    market through 2022 scores well for a reason that is not forecast quality.
 
-    Three things are done to keep that from being a cheat. The date carries a fixed
-    effect, so the coefficient is identified off the cross-section of forecasters
-    inside one month and not off the market. Standard errors are clustered on the
-    date and the interval comes from resampling whole dates, because the months
-    overlap and the forecasters inside a month share a market. And the p value is a
-    permutation over which forecaster got which score inside each date, which
-    assumes nothing about the errors.
-
-    Market exposure enters as a control where the weights are available: a
-    forecaster that held less of the market through 2022 scores well for a reason
-    that is not forecast quality.
+    Returns the panel and whether the exposure control is in it.
     """
     known = _known_forecasters()
     periods = []
@@ -307,7 +297,7 @@ def _transmission_panel(
         frame["forecaster"] = path.parent.parent.name
         periods.append(frame.reset_index()[["rebalance", "forecaster", "net_return"]])
     if not periods:
-        return pd.DataFrame()
+        return pd.DataFrame(), False
 
     performance = (
         pd.concat(periods).groupby(["rebalance", "forecaster"], as_index=False)["net_return"].mean()
@@ -347,6 +337,31 @@ def _transmission_panel(
     if controlled:
         required.append("exposure")
     panel = panel.dropna(subset=[c for c in required if c in panel])
+    return panel, controlled
+
+
+def _transmission_panel(
+    per_asset: pd.DataFrame,
+    joint: pd.DataFrame,
+    runs: Path,
+    allocator: str,
+    panel_dir: Path | None = None,
+) -> pd.DataFrame:
+    """Within-date regression of period return on forecast quality.
+
+    The unit is the forecaster-date pair, not the forecaster. Eleven forecasters
+    give eleven points and a correlation on eleven points cannot resolve anything
+    below about 0.76, which is reported in the cross-sectional table. Here the same
+    eleven give several hundred observations across the rebalancing calendar.
+
+    The date carries a fixed effect, so the coefficient is identified off the
+    cross-section of forecasters inside one month and not off the market. Standard
+    errors are clustered on the date and the interval comes from resampling whole
+    dates, because the months overlap and the forecasters inside a month share a
+    market. The p value is a permutation over which forecaster got which score
+    inside each date, which assumes nothing about the errors.
+    """
+    panel, controlled = build_transmission_panel(per_asset, joint, runs, allocator, panel_dir)
     if panel.empty:
         return panel
 

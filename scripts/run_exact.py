@@ -147,9 +147,8 @@ def scaling(args, cfg, root) -> pd.DataFrame:
     rows = []
 
     # One untimed solve first. The first call in a process pays for importing the
-    # solver and building its data structures, and without this the smallest
-    # universe came out an order of magnitude slower than the next one up, which
-    # reads as a scaling result and is not one.
+    # solver and building its data structures, and that cost would otherwise land
+    # on the smallest universe and look like a scaling effect.
     warm = Problem(
         scenarios=rng.normal(0.0, 0.05, (64, 8)),
         assets=[f"warmup{i}" for i in range(8)],
@@ -171,10 +170,8 @@ def scaling(args, cfg, root) -> pd.DataFrame:
     for size in args.sizes:
         assets = [a for a in liquid.index[: size * 3] if history[a].notna().sum() > 400][:size]
         if len(assets) < size:
-            # The panel runs out at about seventy names. Asking for more used to
-            # run the sweep again on the same seventy and label the row with the
-            # achieved size, so the file held four different experiments all
-            # called n=70 and the figure drew a vertical line through them.
+            # The panel runs out at about seventy names. A size it cannot fill is
+            # skipped, so each row of the output is a distinct universe.
             log.warning("only %d assets available for a universe of %d; skipping",
                         len(assets), size)
             continue
@@ -193,10 +190,9 @@ def scaling(args, cfg, root) -> pd.DataFrame:
             cost_rate=0.0,
             **{
                 **problem_kwargs(cfg),
-                # A third of the universe, but the weight bounds have the last
-                # word: sixty-six names at a two per cent floor needs 132% of the
-                # capital, which is how this sweep used to produce eight rows of
-                # ValueError that the figure then plotted as solve times.
+                # A third of the universe, clamped to what the weight bounds
+                # allow: sixty-six names at a two per cent floor would need 132%
+                # of the capital.
                 "cardinality": feasible_cardinality(
                     max(cfg["alloc.cardinality"], size // 3),
                     len(assets),

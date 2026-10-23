@@ -21,10 +21,10 @@ def _signature(name: str, order: tuple[str, ...]) -> tuple:
 def test_no_two_series_look_the_same(order):
     """Colour, line style and marker cycle at coprime periods, so nothing repeats.
 
-    This used to fail. All three channels cycled with period six, so the first and
-    seventh series came out identical in every respect: the historical-simulation
-    baseline and Prophet-tuned-on-RMSE were the same blue solid line with circles,
-    and those two are precisely the pair the paper asks the reader to compare.
+    With all three channels on a period of six, the first and seventh series would
+    be identical in every respect. In FORECASTER_ORDER those are the
+    historical-simulation baseline and Prophet tuned on RMSE, a pair the paper asks
+    the reader to compare.
     """
     seen: dict[tuple, str] = {}
     for name in order:

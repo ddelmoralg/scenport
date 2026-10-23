@@ -152,9 +152,9 @@ def summary(
 def regime_labels(benchmark: pd.Series, window: int = 90, threshold: float = 0.10) -> pd.Series:
     """Split the sample into bull, bear and sideways stretches.
 
-    Labels come from the trailing ``window``-day return of a *benchmark* series --
-    the capitalisation-weighted index, not the strategy being evaluated. Using the
-    strategy's own returns to define the regimes would be circular.
+    Labels come from the trailing ``window``-day return of a *benchmark* series,
+    the capitalisation-weighted index. Defining the regimes from the returns of the
+    strategy being evaluated would be circular.
     """
     trailing = benchmark.pct_change(window)
     labels = pd.Series("sideways", index=benchmark.index, dtype=object)

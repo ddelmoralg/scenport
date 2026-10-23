@@ -59,9 +59,8 @@ def sigma_for_skew(target: float) -> float:
     """The lognormal sigma whose skew matches a measured one.
 
     A lognormal with parameter s has skew (e^{s^2} + 2) sqrt(e^{s^2} - 1), which
-    has no closed-form inverse, so this bisects. Matching the measured skew rather
-    than guessing at it is what lets the grid say anything about the real
-    diagnostics instead of about a shape nobody has.
+    has no closed-form inverse, so this bisects. Matching the measured skew is what
+    lets the grid say something about the real diagnostics.
     """
     if target <= 0:
         return 0.0
@@ -154,10 +153,8 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     def flush() -> None:
-        # Written after every cell. This takes an hour at a useful replication
-        # count, and the first version of it was killed by a wall clock with the
-        # table already on screen and nothing on disk, which left a stale file
-        # from an earlier buggy run looking current.
+        # Written after every cell. A full run takes about an hour, and a job cut
+        # short by the wall clock should leave the cells it finished on disk.
         pd.DataFrame(rows).to_csv(out, index=False)
 
     for label, sigma, rho in grid:

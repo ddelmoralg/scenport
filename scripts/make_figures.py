@@ -125,13 +125,11 @@ def fig_calibration(runs: Path, artifacts: Path):
 
 
 def fig_scaling(runs: Path, artifacts: Path):
-    """Solve time against universe size: where branch and bound stops finishing.
+    """Solve time against universe size, for the methods that answer the
+    constrained problem.
 
-    Only the methods that answer the constrained problem are drawn. The earlier
-    version plotted all nine allocators and the end labels landed on top of one
-    another; dropping the weightings that do no optimisation fixes that and
-    costs nothing, because their cost does not depend on the universe size in a
-    way anyone needs a figure for.
+    The weightings that do no optimisation are left out. Their cost barely moves
+    with the universe size, and nine series make the labels collide.
     """
     import matplotlib.pyplot as plt
 
@@ -141,8 +139,8 @@ def fig_scaling(runs: Path, artifacts: Path):
         return None
     frame = pd.read_parquet(path)
 
-    # A run that raised has a timing and no objective, and plotting that timing
-    # says a solver answered in a millisecond when it in fact fell over.
+    # A run that raised has a timing and no objective. Plotting it would show a
+    # solver answering in a millisecond when it failed.
     failed = frame["status"].astype(str).str.startswith("failed")
     if failed.any():
         log.warning("dropping %d failed runs from the scaling figure", int(failed.sum()))

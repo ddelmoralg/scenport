@@ -115,11 +115,9 @@ def test_cost_reduces_the_objective(scenarios):
     assert score(w, costly)[0] < score(w, free)[0]
 
 
-# The cardinality has to agree with the weight bounds, and three separate places
-# have got that wrong: an ablation asked for eight names under a ten per cent cap
-# and could only ever invest eighty per cent, the instance exporter hit the same
-# thing from the other side, and the scaling sweep asked for sixty-six names at a
-# two per cent floor. The arithmetic is in one function now, so it is tested once.
+# The cardinality has to agree with the weight bounds. K names need K * w_min <= 1
+# to fit the budget and K * w_max >= 1 to fill it, and feasible_cardinality is the
+# one place that does the arithmetic.
 
 
 def test_cardinality_is_raised_when_the_cap_cannot_fill_the_budget():

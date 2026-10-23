@@ -1,8 +1,8 @@
-"""Rebuild the two failures of the first full run and confirm the check catches them.
+"""Rebuild two known failure modes and confirm the checker catches both.
 
-A guard nobody has seen fire is a guess. Both faults below are reconstructions of
-what was actually on disk: scenario sets holding a 30-day return of 1e14, and a
-gap study in which the relaxation outscored branch and bound on every date.
+The faults are taken from real output: scenario sets holding a 30-day return of
+1e14, and a gap study in which the relaxation outscored branch and bound on every
+date. Each test writes one of them to disk and runs the check against it.
 """
 
 from __future__ import annotations
@@ -265,11 +265,10 @@ def test_a_real_violation_in_a_base_run_still_fails(checker, tmp_path):
 
 
 def test_a_set_that_went_through_the_ceiling_is_caught(checker, tmp_path):
-    """What the first version of this check could not see.
+    """A set whose values exceed the ceiling is flagged even if none sits on it.
 
-    It only counted points sitting on the bound, so a generator that skipped the
-    bound entirely had nothing on it to count and passed. The transformer reached
-    3.98e15 that way while AR-GARCH sat at exactly 90.
+    Counting points at the bound misses a generator that bypassed the bound
+    entirely, because it leaves nothing there to count.
     """
     runs = tmp_path / "runs"
     d = runs / "scenarios" / "transformer" / "seed00"

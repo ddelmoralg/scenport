@@ -92,10 +92,9 @@ def test_search_is_close_to_the_mixed_integer_optimum(problem, rng):
 def test_the_relaxation_bounds_the_integer_problem(problem, rng):
     """Dropping the cardinality constraint can only help, never hurt.
 
-    This used to be asserted of `cvar_lp`, and it passed, which was the clue
-    nobody followed: an allocator that beats a proven optimum is not a good
-    allocator, it is solving a different problem. The relaxation now has its own
-    name and the feasible version is held to the opposite standard below.
+    This holds for the relaxation, `cvar_lp_bound`. The feasible `cvar_lp` is held
+    to the opposite standard in the next test, because a feasible allocator that
+    beats a proven optimum would be solving a different problem.
     """
     pytest.importorskip("cvxpy")
     from scenport.alloc.exact import MilpExact, subsample
@@ -110,7 +109,7 @@ def test_the_relaxation_bounds_the_integer_problem(problem, rng):
 
 @pytest.mark.slow
 def test_the_feasible_lp_does_not_beat_the_exact_optimum(problem, rng):
-    """The invariant the old test was missing."""
+    """A feasible allocator never beats the proven optimum."""
     pytest.importorskip("cvxpy")
     from scenport.alloc.exact import MilpExact, subsample
     from scenport.alloc.objective import is_feasible

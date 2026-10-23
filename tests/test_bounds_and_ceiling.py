@@ -75,13 +75,12 @@ def test_a_wild_generator_is_brought_back_to_the_bound():
 
 
 def test_a_forecaster_that_replaces_simulate_cannot_step_around_the_ceiling():
-    """The one the first version of this missed.
+    """The ceiling holds for forecasters that override simulate().
 
     The neural forecasters batch every asset through a single network, so they
-    override simulate() wholesale rather than implementing simulate_one. A ceiling
-    applied inside simulate() therefore never ran for them, and the transformer
-    reached a 30-day return of 3.98e15 while AR-GARCH sat neatly at 90. The bound
-    lives in ScenarioSet now, which every path into a scenario set goes through.
+    override simulate() wholesale instead of implementing simulate_one. A ceiling
+    applied inside simulate() would never run for them. The bound is enforced in
+    ScenarioSet, which every path into a scenario set goes through.
     """
 
     class Overriding(base.ScenarioForecaster):

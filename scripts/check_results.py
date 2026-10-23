@@ -123,12 +123,9 @@ def check_scenarios(runs: Path, report: Report) -> None:
                     {
                         "forecaster": name,
                         "clipped_share": touching / paths.size,
-                        # Not "did it lean on the ceiling" but "did it go through
-                        # it". The first version of this check only asked the
-                        # former, and the forecasters that override simulate()
-                        # skipped the bound entirely: the transformer reached
-                        # 3.98e15 while AR-GARCH sat at exactly 90, so nothing was
-                        # sitting on the ceiling to count.
+                        # The largest value as well as the share at the bound:
+                        # a generator that bypasses the ceiling leaves nothing
+                        # on it to count.
                         "beyond": float(np.nanmax(paths)),
                         "below": float(np.nanmin(paths)),
                     }
@@ -298,12 +295,11 @@ def check_sensitivity(artifacts: Path, report: Report) -> None:
 
 
 def check_no_silent_failures(runs: Path, report: Report) -> None:
-    """A run that raised still writes a row, with a timing and no objective.
+    """Flag runs that raised.
 
-    The scaling sweep produced eight of those and nothing said so. They carried
-    a plausible-looking wall-clock time, so the figure drew them as if four
-    metaheuristics had solved a seventy-asset instance in a millisecond. A
-    failure is allowed to happen; going unmentioned is not.
+    A failed run still writes a row, with a plausible wall-clock time and no
+    objective, and anything that plots or averages timings will read it as a
+    solve. Reporting failures here keeps them out of the figures.
     """
     log.info("failed runs")
     found = False

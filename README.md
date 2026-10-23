@@ -1,14 +1,16 @@
 # scenport
 
-Scenario-based portfolio construction for cryptoassets. Code for the paper (title
-pending).
+Scenario-based portfolio construction for cryptoassets. Code and data for the
+paper *Cardinality-constrained mean-CVaR portfolio selection over simulated
+scenarios: exact bounds, heuristic gaps, and sensitivity to the scenario
+generator*.
 
-Two things. A mean-CVaR allocator that optimises directly over simulated scenarios
-under a cardinality limit and a minimum position size, validated against the exact
-mixed-integer optimum wherever branch and bound can close it. And, on top of that,
-a benchmark that asks which property of a forecast actually shows up in the
-portfolio built from it. Forecasting papers report accuracy, a risk-aware
-objective consumes calibration, and they are not the same thing.
+The repository holds a mean-CVaR allocator that optimises directly over simulated
+scenarios under a cardinality limit and a minimum position size, checked against
+the exact mixed-integer optimum. On top of it sits a benchmark that asks which
+property of a forecast shows up in the portfolio built from it. Forecasting papers
+report accuracy, while a risk-aware objective consumes calibration, and the two
+need not agree.
 
 The second question needs eleven forecasters and fifteen allocators to be
 interchangeable parts, which is what most of this repository is.
@@ -78,7 +80,7 @@ laptop                          github                    cluster
                                                               |
                                                         jobs run
                                                               |
-  git pull  <-------------  <------------  60_publish.sh pushes artifacts/
+  git pull  <-------------  <------------  publish.sh on the login node
 ```
 
 **Once, on the laptop:**
@@ -100,9 +102,18 @@ bash slurm/submit_all.sh
 ```
 
 `submit_all.sh` refuses to run on a dirty tree, pulls, checks the queues it is
-about to use still exist, submits the eight jobs with the right dependencies, and
-prints the ids. The last job commits `artifacts/` and
-pushes; if the laptop pushed in the meantime it rebases and retries.
+about to use still exist, submits the seven jobs with the right dependencies, and
+prints the ids.
+
+The compute nodes on our cluster cannot resolve github.com, so publishing is a
+separate step. Once the aggregation job finishes, on the login node:
+
+```bash
+bash scripts/publish.sh
+```
+
+It commits `artifacts/` and pushes, rebasing and retrying if the laptop pushed in
+the meantime.
 
 **Back on the laptop:** `git pull`, and the tables and figures are in `artifacts/`.
 
@@ -136,10 +147,6 @@ with write access ticked, then run it again.
 
 Both scripts are safe to rerun.
 
-If the compute nodes are firewalled off from github.com, drop `60_publish.sh` from
-`submit_all.sh` and run `bash scripts/publish.sh` on the login node once the
-aggregation finishes.
-
 ## Jobs
 
 The queue names below are the ones on our cluster: `short` caps at 4 hours,
@@ -153,11 +160,12 @@ differ.
 | `30_backtest` | `medium` | one task per forecaster, cheap allocators | under 1 h |
 | `32_backtest_ea` | `medium` | 11 forecasters x 4 metaheuristics, 5 seeds | 2-3 h |
 | `31_ablations` | `medium` | 18 sensitivity runs | 2-6 h |
-| `40_exact` | `long` | gaps + scaling sweep, 24 cores | up to 3 days |
+| `40_exact` | `long` | gaps + scaling sweep, 24 cores | a few hours |
 | `50_aggregate` | `medium` | one task | under 1 h |
 
-Everything except `40_exact` fits in a day. Only the mixed-integer scaling sweep
-needs the long queue, and it is meant to run until it times out.
+Everything fits in a day. `40_exact` sits on the long queue for headroom: each
+exact solve is allowed fifteen minutes, although on the thinned instances in the
+paper none needed more than a few seconds.
 
 The two forecasting jobs run at the same time and share one node, so their
 concurrency limits are set together: 20 x 8 cores plus 3 x 8 leaves headroom on a
@@ -214,9 +222,13 @@ coefficient-of-variation test as a backstop for pegs the list misses.
 
 `scripts/export_instances.py` dumps the allocation problems as an npz plus a JSON
 header: scenario matrix, previous weights, constraint parameters, and the best
-objective we know of with a flag for whether a solver proved it. No dependency on
-this package. Anyone benchmarking a different solver should not have to run a
-Prophet sweep first.
+objective we know of with a flag for whether a solver proved it. The released set
+in `artifacts/instances/` has 105 instances, 88 of them with a proven optimum; the
+other 17 vary a constraint or a universe size that the exact run did not cover and
+carry no bound.
+
+Reading an instance needs numpy and nothing from this package, so anyone
+benchmarking a different solver does not have to run a Prophet sweep first.
 
 ## Notes
 
@@ -238,4 +250,6 @@ suite detects it and skips.
 
 ## Licence
 
-MIT.
+The code is MIT. The derived data panel in `data/panel/` keeps the CC BY-NC 4.0
+licence of its source, so anything built on the panel is for non-commercial use
+and has to credit Coin Metrics.

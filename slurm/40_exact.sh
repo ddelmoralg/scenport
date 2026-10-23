@@ -48,7 +48,7 @@ case ${SLURM_ARRAY_TASK_ID:-0} in
   1)
     python scripts/run_exact.py scaling \
         --config configs/base.yaml \
-        --sizes 10 15 20 30 50 75 100 150 200 \
+        --sizes 10 15 20 30 50 70 \
         --max-scenarios 400 \
         --time-limit 3600
     ;;

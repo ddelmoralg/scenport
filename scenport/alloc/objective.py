@@ -107,18 +107,16 @@ def project_simplex_box(v: np.ndarray, lo: float, hi: float, tol: float = 1e-10)
 
 
 def feasible_cardinality(k: int, n_assets: int, w_min: float, w_max: float) -> int:
-    """The largest cardinality at or below ``k`` that a portfolio can actually have.
+    """Clamp a requested cardinality to what the weight bounds allow.
 
     A support of exactly K names needs ``K * w_min <= 1`` to fit inside the budget
-    and ``K * w_max >= 1`` to fill it. The first caps K, the second raises it, and
-    callers that build instances from a size parameter have now got this wrong in
-    both directions: an ablation asked for a 10% cap with eight names and could
-    only invest 80%, and the scaling sweep asked for 66 names at a 2% floor and
-    needed 132% of the capital. So the arithmetic lives here instead of being
-    redone at each call site.
+    and ``K * w_max >= 1`` to fill it. The first caps K and the second raises it.
+    Eight names under a 10% cap can only invest 80%, and 66 names at a 2% floor
+    would need 132% of the capital. Every caller that builds an instance from a
+    size parameter goes through here, so the arithmetic is done once.
 
-    Raises if no K in ``[1, n_assets]`` works, because that is a badly specified
-    instance rather than something to silently round away.
+    Raises if no K in ``[1, n_assets]`` works, since that instance is badly
+    specified and should not be quietly rounded into a different one.
     """
     ceiling = min(n_assets, int(1.0 / w_min) if w_min > 0 else n_assets)
     floor = int(np.ceil(1.0 / w_max)) if w_max > 0 else 1
