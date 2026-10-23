@@ -101,7 +101,7 @@ ea:
   # `patience` generations. Saves roughly half the budget in practice.
   patience: 40
   tol: 1.0e-6
-  n_seeds: 5                         # 30 for the headline configuration
+  n_seeds: 5                         # per rebalancing date in the backtests; the exact study passes --seeds 10
   ga:
     crossover: uniform
     p_crossover: 0.9
