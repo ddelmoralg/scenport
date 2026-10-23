@@ -49,11 +49,27 @@ QUALITY_COLUMNS = {
 # loading
 
 
-def load_summaries(runs: Path) -> pd.DataFrame:
+def load_summaries(runs: Path, include_ablations: bool = False) -> pd.DataFrame:
+    """Every per-run summary, one row per seed.
+
+    The run is read from the file name, ``<run>__<allocator>.parquet``, and not
+    from the ``forecaster`` column. An ablation such as ``garch_card05`` records
+    its forecaster as plain ``garch`` with the same seeds as the base run, so
+    grouping on that column would average the base configuration together with
+    every sensitivity variant. Ablations are left out unless asked for.
+    """
     files = sorted((runs / "summary").glob("*.parquet"))
     if not files:
         raise FileNotFoundError(f"no backtest summaries under {runs / 'summary'}")
-    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    frames = []
+    for f in files:
+        frame = pd.read_parquet(f)
+        frame["forecaster"] = f.stem.split("__")[0]
+        frames.append(frame)
+    out = pd.concat(frames, ignore_index=True)
+    if not include_ablations:
+        out = out[out["forecaster"].isin(_known_forecasters())].reset_index(drop=True)
+    return out
 
 
 def load_scores(runs: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
