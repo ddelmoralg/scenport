@@ -39,7 +39,9 @@ extra=()
 workers="${SLURM_CPUS_PER_TASK:-8}"
 case "$forecaster" in
     lstm|deepar|transformer)
-        extra=(--param device=cuda)
+        # SCENPORT_DEVICE=cpu runs them without a GPU when none is free; the
+        # procedure is the same, only the arithmetic device changes.
+        extra=(--param "device=${SCENPORT_DEVICE:-cuda}")
         workers=1
         ;;
 esac
