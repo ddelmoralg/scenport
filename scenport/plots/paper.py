@@ -4,8 +4,8 @@
   reseeding it.
 - `gaps`: the metaheuristics land close to a proven optimum, and the discrete
   constraints are worth solving.
-- `transmission`: one diagnostic out of six survives both tests and the loss of
-  any single date.
+- `transmission`: the diagnostics are associated with return under permutation,
+  and the drop-one check shows how much of that rests on one date.
 
 The cross-section of generator averages against realised Sharpe ratios has no
 figure. With eleven points it has almost no power, and the paper gives it as a
@@ -119,7 +119,7 @@ def fig_gaps(artifacts: Path):
     ax.set_yticklabels([style.label(n) for n in frame["allocator"]])
     ax.invert_yaxis()
     ax.set_xscale("log")
-    ax.set_xlabel("Objective gap above the proven optimum (log scale)")
+    ax.set_xlabel("Relative distance from the proven optimum (log scale)")
     ax.grid(axis="y", visible=False)
 
     # Three families, and the legend says which is which rather than repeating
@@ -143,47 +143,55 @@ def fig_gaps(artifacts: Path):
 
 
 def fig_transmission(artifacts: Path):
-    """Which diagnostic predicts the decision, and which only looks like it does.
+    """How robust each association between diagnostic and return is.
 
-    Left: the two tests of the same null, which disagree. Right: how much is
-    left of each coefficient once the single worst date is removed. A result
-    that needs one month out of eighty-five is not a result, and reading the
-    panels together is what separates the one finding from the four that look
-    like findings on the left.
+    Left: three tests of the same null, each Holm-adjusted over the six
+    diagnostics: cluster-robust errors, the within-date permutation and the
+    permutation that relabels whole generator series. Right: how much is left of
+    each coefficient once the single worst date is removed, against 1.96 and
+    against the Bonferroni value for six tests. Read together, the panels show
+    that the permutation tests find associations the drop-one check cannot hold.
     """
     import matplotlib.pyplot as plt
+    from scipy import stats
 
-    frame = pd.read_csv(artifacts / "transmission_panel.csv")
-    frame = frame.sort_values("t_min_drop_one")
+    frame = pd.read_csv(artifacts / "inference_family.csv")
+    frame = frame.sort_values("min_abs_t_drop_one")
+    bonferroni = float(stats.norm.ppf(1 - 0.05 / (2 * len(frame))))
 
-    survivors = frame["survives_dropping_any_date"].to_numpy()
-    colours = [style.PALETTE[0] if s else style.REFERENCE for s in survivors]
+    past = frame["drop_one_196"].to_numpy()
+    colours = [style.PALETTE[0] if s else style.REFERENCE for s in past]
     y = np.arange(len(frame))
 
-    fig, axes = plt.subplots(1, 2, figsize=(style.TWO_COL, 2.9), sharey=True)
-
+    fig, axes = plt.subplots(1, 2, figsize=(style.TWO_COL, 3.0), sharey=True)
     left, right = axes
-    left.scatter(frame["p_clustered"], y, s=40, color=colours, marker="o",
-                 zorder=3, edgecolor="white", linewidth=0.6)
-    left.scatter(frame["p_permutation"], y, s=40, color=colours, marker="D",
-                 zorder=3, facecolor="white", linewidth=1.1,
-                 edgecolor=colours)
-    for yi, row in zip(y, frame.itertuples(), strict=True):
-        left.hlines(yi, min(row.p_clustered, row.p_permutation),
-                    max(row.p_clustered, row.p_permutation),
-                    color=style.MUTED, linewidth=0.8, alpha=0.5, zorder=2)
+
+    tests = [("p_clustered_holm", "o", True, "Cluster-robust"),
+             ("p_permutation_holm", "D", False, "Within-date permutation"),
+             ("p_block_holm", "s", False, "Generator-series permutation")]
+    for column, marker, filled, _ in tests:
+        if filled:
+            left.scatter(frame[column], y, s=36, color=colours, marker=marker, zorder=3,
+                         edgecolor="white", linewidth=0.6)
+        else:
+            left.scatter(frame[column], y, s=36, marker=marker, zorder=3,
+                         facecolor="white", linewidth=1.1, edgecolor=colours)
+    values = frame[[t[0] for t in tests]].to_numpy()
+    left.hlines(y, values.min(axis=1), values.max(axis=1), color=style.MUTED,
+                linewidth=0.8, alpha=0.5, zorder=2)
     left.axvline(0.05, color=style.INK, linewidth=0.9, linestyle="--", zorder=1)
     left.set_xscale("log")
-    left.set_xlabel("$p$ value (log scale)")
+    left.set_xlabel("Holm-adjusted $p$ value (log scale)")
     left.text(0.05, len(frame) - 0.35, " 0.05", fontsize=7.5, color=style.INK,
               ha="left", va="top")
 
-    right.barh(y, np.abs(frame["t_min_drop_one"]), height=0.55, color=colours,
+    right.barh(y, frame["min_abs_t_drop_one"], height=0.55, color=colours,
                alpha=0.85, zorder=3)
-    right.axvline(1.96, color=style.INK, linewidth=0.9, linestyle="--", zorder=4)
+    for value, dash in ((1.96, "--"), (bonferroni, ":")):
+        right.axvline(value, color=style.INK, linewidth=0.9, linestyle=dash, zorder=4)
+        right.text(value, len(frame) - 0.35, f" {value:.2f}", fontsize=7.5,
+                   color=style.INK, ha="left", va="top")
     right.set_xlabel("Smallest $|t|$ over all single-date deletions")
-    right.text(1.96, len(frame) - 0.35, " 1.96", fontsize=7.5, color=style.INK,
-               ha="left", va="top")
     right.grid(axis="y", visible=False)
 
     left.set_yticks(y)
@@ -191,13 +199,13 @@ def fig_transmission(artifacts: Path):
     left.grid(axis="y", visible=False)
 
     handles = [
-        plt.Line2D([], [], color=style.MUTED, marker="o", linestyle="",
-                   markersize=6, label="Cluster-robust"),
-        plt.Line2D([], [], color=style.MUTED, marker="D", linestyle="",
-                   markersize=6, markerfacecolor="white", label="Permutation"),
+        plt.Line2D([], [], color=style.MUTED, marker=marker, linestyle="",
+                   markersize=6, markerfacecolor=style.MUTED if filled else "white",
+                   label=name)
+        for _, marker, filled, name in tests
     ]
     # Under both panels. Inside the left one it would sit on a row.
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.04),
-               ncol=2, fontsize=7.5)
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.05),
+               ncol=3, fontsize=7.5)
     fig.tight_layout()
     return style.save(fig, artifacts, "transmission")

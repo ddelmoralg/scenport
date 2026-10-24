@@ -131,7 +131,11 @@ def gaps(args, cfg, root) -> pd.DataFrame:
 
 
 def scaling(args, cfg, root) -> pd.DataFrame:
-    """Grow the universe on a fixed date and watch the solver give up.
+    """Grow the universe on a fixed date and time every method on the same problem.
+
+    Pass --max-scenarios at least as large as the scenario count, so branch and
+    bound solves the problem the searches solve. With thinning, its optimum is
+    that of a smaller problem and can lose to them on the full one.
 
     The scenario set is widened by drawing extra assets from the panel rather than
     by simulating new ones, so the dependence structure stays realistic: a

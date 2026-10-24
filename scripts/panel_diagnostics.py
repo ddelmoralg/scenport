@@ -32,7 +32,7 @@ def main() -> int:
     runs = cfg.resolve("paths.runs", root)
     panel_dir = cfg.resolve("paths.panel", root)
 
-    per_asset, joint = aggregate.load_scores(runs)
+    per_asset, joint = aggregate.load_scores(runs, panel_dir, int(cfg["backtest.train_days"]))
     panel, _ = aggregate.build_transmission_panel(per_asset, joint, runs, "ga", panel_dir)
     print("panel rows:", len(panel), " dates:", panel["rebalance"].nunique())
     print()

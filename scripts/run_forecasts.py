@@ -85,7 +85,10 @@ def one_date(args_tuple) -> list[dict]:
                 "pit": scoring.pit(samples, observed, rng),
                 "cover_80": scoring.interval_coverage(samples, observed, 0.80),
                 "cover_50": scoring.interval_coverage(samples, observed, 0.50),
-                "mase_scale": float(np.nanmean(np.abs(np.diff(in_sample[:, j])))),
+                # In-sample naive one-day error, as a return like the forecast
+                # error it scales. aggregate.py recomputes it from the panel.
+                "mase_scale": float(np.nanmean(np.abs(np.diff(in_sample[:, j])
+                                                      / in_sample[:-1, j]))),
             }
         )
 

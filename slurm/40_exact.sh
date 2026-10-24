@@ -11,7 +11,7 @@
 #SBATCH --error=logs/%x_%A_%a.err
 
 # Branch and bound. Task 0 measures the optimality gap on the real rebalancing
-# dates; task 1 grows the universe until the solver stops finishing.
+# dates; task 1 grows the universe and times every method on the same problem.
 #
 # This is the only job that needs the long queue. Three days of wall clock is
 # deliberate: the point of the scaling run is to find where the MILP stops being
@@ -46,10 +46,13 @@ case ${SLURM_ARRAY_TASK_ID:-0} in
         --time-limit 900
     ;;
   1)
+    # No thinning here. The metaheuristics see all 1000 scenarios, so the exact
+    # solver has to as well, or the times compare two different problems and the
+    # thinned optimum loses to the searches on the full one.
     python scripts/run_exact.py scaling \
         --config configs/base.yaml \
         --sizes 10 15 20 30 50 70 \
-        --max-scenarios 400 \
+        --max-scenarios 1000 \
         --time-limit 3600
     ;;
 esac

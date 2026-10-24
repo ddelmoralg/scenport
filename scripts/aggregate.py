@@ -72,15 +72,58 @@ def load_summaries(runs: Path, include_ablations: bool = False) -> pd.DataFrame:
     return out
 
 
-def load_scores(runs: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+COVERAGE_LEVELS = (0.50, 0.80)
+
+
+def return_scales(per_asset: pd.DataFrame, price: pd.DataFrame, train_days: int) -> pd.Series:
+    """Mean absolute daily return of each asset over its training window.
+
+    This is the scale of the MASE: the in-sample error of the naive one-day
+    forecast, in the same units as the forecast error, which is a return. The
+    forecast scripts once stored the mean absolute daily change of the price in
+    dollars instead, which made an asset's weight in the average depend on what it
+    cost. The scale is recomputed here from the panel so old and new runs agree.
+    """
+    returns = price.pct_change(fill_method=None).abs()
+    scales = {}
+    for date in pd.DatetimeIndex(per_asset["rebalance"].unique()):
+        window = returns.loc[:date].iloc[-(train_days + 1) : -1]
+        scales[date] = window.mean()
+    keys = zip(pd.DatetimeIndex(per_asset["rebalance"]), per_asset["asset"])
+    return pd.Series([scales[d].get(a, np.nan) for d, a in keys], index=per_asset.index)
+
+
+def coverage_error(frame: pd.DataFrame) -> pd.Series:
+    """Distance of realised coverage from nominal, averaged over the levels.
+
+    ``frame`` holds the realised coverage at each level, already averaged over the
+    assets of a date (or over whatever group is being scored). Coverage is a rate,
+    so the error is only defined for a group: an asset-by-asset |hit - 0.8| would be
+    0.8 - 0.6 x hit rate, which rewards intervals that are too wide.
+    """
+    parts = [(frame[f"cover_{int(100 * level)}"] - level).abs() for level in COVERAGE_LEVELS]
+    return sum(parts) / len(parts)
+
+
+def load_scores(runs: Path, panel_dir: Path | None = None,
+                train_days: int = 730) -> tuple[pd.DataFrame, pd.DataFrame]:
     files = sorted((runs / "scores").glob("*.parquet"))
     if not files:
         raise FileNotFoundError(f"no forecast scores under {runs / 'scores'}")
     frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    # Replicate runs for the noise floor live under their own tree, but a stray
+    # file with another seed would be averaged in silently, so keep seed 0 only.
+    frame = frame[frame["seed"] == 0]
     joint = frame[frame["asset"] == "__joint__"].drop(columns=["asset"])
     per_asset = frame[frame["asset"] != "__joint__"].copy()
+    per_asset["rebalance"] = pd.to_datetime(per_asset["rebalance"])
+    if panel_dir is None:
+        raise ValueError("the MASE scale is computed from the price panel; pass panel_dir")
+    from scenport.data.panel import Panel
+
+    price = Panel.read(panel_dir).price
+    per_asset["mase_scale"] = return_scales(per_asset, price, train_days)
     per_asset["mase"] = per_asset["abs_error"] / per_asset["mase_scale"].replace(0, np.nan)
-    per_asset["coverage_error"] = (per_asset["cover_80"] - 0.80).abs()
     return per_asset, joint
 
 
@@ -136,7 +179,11 @@ def table_forecasts(per_asset: pd.DataFrame, joint: pd.DataFrame) -> pd.DataFram
                 "crps": group["crps"].mean(),
                 "pinball": group["pinball"].mean(),
                 "cover_80": group["cover_80"].mean(),
-                "coverage_error": group["coverage_error"].mean(),
+                "cover_50": group["cover_50"].mean(),
+                # Scored date by date, as in the panel, then averaged.
+                "coverage_error": coverage_error(
+                    group.groupby("rebalance")[["cover_50", "cover_80"]].mean()
+                ).mean(),
                 "pit_ks": ks,
                 "energy_score": joint_group["energy_score"].mean(),
                 "variogram_score": joint_group["variogram_score"].mean(),
@@ -320,9 +367,15 @@ def build_transmission_panel(
     )
     quality = (
         per_asset.groupby(["rebalance", "forecaster"], as_index=False)[
-            ["mase", "crps", "pinball", "coverage_error"]
+            ["mase", "crps", "pinball", "cover_50", "cover_80"]
         ].mean()
     )
+    quality["coverage_error"] = coverage_error(quality)
+    # What earlier versions called coverage error, kept under its real name for
+    # the supplement: the share of assets whose outcome fell outside the 80%
+    # interval.
+    quality["miss_80"] = 1.0 - quality["cover_80"]
+    quality = quality.drop(columns=["cover_50", "cover_80"])
     panel = performance.merge(quality, on=["rebalance", "forecaster"], how="inner")
 
     # The joint scores live on their own rows because they are not per asset. They
@@ -988,7 +1041,8 @@ def main() -> int:
     artifacts = cfg.resolve("paths.artifacts", root)
 
     summaries = load_summaries(runs)
-    per_asset, joint = load_scores(runs)
+    per_asset, joint = load_scores(runs, cfg.resolve("paths.panel", root),
+                                   int(cfg["backtest.train_days"]))
 
     # Consolidated copies of the two inputs, so re-analysis elsewhere does not need
     # the run tree. These are what travel back over git; the tree itself does not.
