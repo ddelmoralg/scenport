@@ -16,12 +16,24 @@ The problem is
          w_i = 0 or w_i >= w_min
          ||w||_0 <= cardinality
 
-with CVaR written as a positive loss: the mean of the worst (1 - alpha) fraction of
-the S scenario returns.
+with CVaR written as a positive loss in the Rockafellar-Uryasev form,
 
-`best_known` in the JSON is the best objective value we have found and `proven` says
-whether a mixed-integer solver closed it. Improvements welcome; open an issue with
-the instance name, the objective value and how you got it.
+    CVaR_alpha = min_z  z + sum_s max(0, -(R w)_s - z) / ((1 - alpha) S),
+
+which is the mean of the worst (1 - alpha) S scenario returns when that number is
+whole and gives the last tail scenario a fractional weight when it is not (S = 250
+at alpha = 0.95, for example).
+
+Each header carries the answer we have for its own scenarios, with no thinning:
+
+    best_known     objective of best_weights, recomputed from the npz
+    best_weights   the portfolio that attains it, in the order of `assets`
+    proven         HiGHS reported optimality within mip_rel_gap
+    solver, mip_rel_gap, solve_seconds, status
+
+so a result can be checked by evaluating best_weights, without trusting the number.
+Improvements welcome; open an issue with the instance name, the weights and how you
+got them.
 
 ## Families
 

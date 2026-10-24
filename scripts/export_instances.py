@@ -2,6 +2,7 @@
 """Export the allocation instances as a standalone benchmark set.
 
     python scripts/export_instances.py --families generators scale constraints
+    python scripts/solve_instances.py
 
 Each instance is the scenario matrix plus the constraint parameters, which is
 everything an optimiser needs. No forecaster, no price panel, no dependency on this
@@ -73,12 +74,24 @@ The problem is
          w_i = 0 or w_i >= w_min
          ||w||_0 <= cardinality
 
-with CVaR written as a positive loss: the mean of the worst (1 - alpha) fraction of
-the S scenario returns.
+with CVaR written as a positive loss in the Rockafellar-Uryasev form,
 
-`best_known` in the JSON is the best objective value we have found and `proven` says
-whether a mixed-integer solver closed it. Improvements welcome; open an issue with
-the instance name, the objective value and how you got it.
+    CVaR_alpha = min_z  z + sum_s max(0, -(R w)_s - z) / ((1 - alpha) S),
+
+which is the mean of the worst (1 - alpha) S scenario returns when that number is
+whole and gives the last tail scenario a fractional weight when it is not (S = 250
+at alpha = 0.95, for example).
+
+Each header carries the answer we have for its own scenarios, with no thinning:
+
+    best_known     objective of best_weights, recomputed from the npz
+    best_weights   the portfolio that attains it, in the order of `assets`
+    proven         HiGHS reported optimality within mip_rel_gap
+    solver, mip_rel_gap, solve_seconds, status
+
+so a result can be checked by evaluating best_weights, without trusting the number.
+Improvements welcome; open an issue with the instance name, the weights and how you
+got them.
 
 ## Families
 
@@ -173,37 +186,7 @@ def _base_kwargs(cfg) -> dict:
     }
 
 
-def _known_bounds(runs_dir: Path) -> dict:
-    """Whatever the gap study already closed, so the headers can carry a bound."""
-    solved = {}
-    path = runs_dir / "exact" / "gaps.parquet"
-    if not path.exists():
-        return solved
-    gaps = pd.read_parquet(path)
-
-    # cvar_lp_bound is the continuous relaxation, an upper bound that no feasible
-    # portfolio attains, so it cannot supply a best known objective.
-    feasible = gaps[gaps["allocator"] != "cvar_lp_bound"]
-    best = feasible.groupby(["rebalance", "allocator"])["objective"].max().unstack()
-
-    # Proven means the exact solver reported optimality, read from the status
-    # column. Which allocator scored highest is a separate question and can
-    # disagree at the ninth decimal.
-    closed = set(
-        pd.Timestamp(d)
-        for d, st in gaps.loc[gaps["allocator"] == "milp", ["rebalance", "status"]].values
-        if str(st) == "optimal"
-    )
-    for date, row in best.iterrows():
-        stamp = pd.Timestamp(date)
-        solved[stamp] = {
-            "best_known": float(row.max()),
-            "proven": stamp in closed,
-        }
-    return solved
-
-
-def family_generators(args, cfg, out, panel_dir, runs_dir, bounds) -> int:
+def family_generators(args, cfg, out, panel_dir, runs_dir) -> int:
     """Every generator on the same dates and the same assets."""
     universe = read_universe(panel_dir / "universe.parquet")
     dates = list(universe.dates[:: args.every])[: args.n_dates]
@@ -231,7 +214,6 @@ def family_generators(args, cfg, out, panel_dir, runs_dir, bounds) -> int:
                     "family": "generators",
                     "generator": forecaster,
                     "rebalance_date": str(date.date()),
-                    **bounds.get(pd.Timestamp(date), {}),
                 })
                 written += 1
     return written
@@ -386,10 +368,13 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "README.md").write_text(README, encoding="utf-8")
 
-    bounds = _known_bounds(runs_dir)
+    # Bounds are not filled in here. They used to be borrowed from the gap study,
+    # which solved one generator on a 400-scenario subsample of each date, and that
+    # number then labelled every instance on the date. solve_instances.py solves
+    # each instance on its own scenarios instead; run it after this.
     counts = {}
     if "generators" in args.families:
-        counts["generators"] = family_generators(args, cfg, out, panel_dir, runs_dir, bounds)
+        counts["generators"] = family_generators(args, cfg, out, panel_dir, runs_dir)
     if "scale" in args.families:
         counts["scale"] = family_scale(args, cfg, out, panel_dir)
     if "constraints" in args.families:
