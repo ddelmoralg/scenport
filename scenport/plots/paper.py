@@ -40,6 +40,10 @@ def fig_displacement(artifacts: Path):
 
     floors = pd.read_csv(artifacts / "noise_floor.csv")
     between = pd.read_csv(artifacts / "displacement_between.csv")
+    # Only pairs of generators that have a full floor, so the ratio drawn compares
+    # the same generators on both sides.
+    keep = set(floors["forecaster"])
+    between = between[between["forecaster_a"].isin(keep) & between["forecaster_b"].isin(keep)]
 
     floor = float(floors["floor_full_l1"].mean())
     moved = float(between["l1_mean"].mean())
