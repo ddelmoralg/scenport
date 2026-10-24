@@ -64,6 +64,8 @@ def main() -> int:
     parser.add_argument("--n-replicates", type=int, default=5)
     parser.add_argument("--boot", type=int, default=2000)
     parser.add_argument("--out", default="artifacts")
+    parser.add_argument("--complete-only", action="store_true",
+                        help="use the generators whose replicates are all present, and say which")
     args = parser.parse_args()
 
     runs = ROOT / args.runs
@@ -98,9 +100,20 @@ def main() -> int:
             ignore_index=True,
         )
 
+    all_names = list(names)
     if missing:
         print("replicates missing for:", ", ".join(missing))
-        return 1
+        if not args.complete_only:
+            return 1
+        # The floor and the between-generator distance are then both taken over
+        # the same generators, so their ratio compares like with like.
+        names = [n for n in names if n not in missing]
+
+    between_all = []
+    for left, right in combinations(all_names, 2):
+        pieces = [_pair_distance(a, b, TOL) for a in seed_runs[left] for b in seed_runs[right]]
+        between_all.append(pd.concat([p for p in pieces if not p.empty], ignore_index=True))
+    between_all_l1 = float(pd.concat(between_all, ignore_index=True)["l1"].mean())
 
     between = []
     for left, right in combinations(names, 2):
@@ -154,6 +167,9 @@ def main() -> int:
     mean_between = float(between["l1"].mean())
     head = {
         "allocator": args.allocator,
+        "generators": names,
+        "excluded": missing,
+        "between_all_generators_l1": between_all_l1,
         "n_generators": len(names),
         "n_dates": int(len(dates)),
         "replicates": args.n_replicates,
