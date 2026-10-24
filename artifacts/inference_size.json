@@ -5,20 +5,28 @@
   "n_generators": 11,
   "measured_on_the_real_panel": {
     "mase": {
-      "skew": 8.17,
-      "rho": 0.08
-    },
-    "pinball": {
-      "skew": 3.5,
-      "rho": 0.34
+      "skew": 2.95,
+      "rho": 0.44
     },
     "crps": {
       "skew": 3.17,
       "rho": 0.36
     },
+    "pinball": {
+      "skew": 3.5,
+      "rho": 0.34
+    },
     "coverage_error": {
-      "skew": 0.9,
-      "rho": 0.44
+      "skew": 0.73,
+      "rho": 0.28
+    },
+    "energy_score": {
+      "skew": 3.32,
+      "rho": 0.34
+    },
+    "variogram_score": {
+      "skew": 3.6,
+      "rho": 0.29
     }
   }
 }
