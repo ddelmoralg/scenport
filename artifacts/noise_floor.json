@@ -1,0 +1,42 @@
+{
+  "allocator": "ga",
+  "generators": [
+    "arima",
+    "ets",
+    "garch",
+    "lgbm",
+    "prophet",
+    "prophet_rmse",
+    "rw",
+    "rw_nodrift"
+  ],
+  "excluded": [
+    "deepar",
+    "lstm",
+    "transformer"
+  ],
+  "between_all_generators_l1": 0.7837207569812089,
+  "n_generators": 8,
+  "n_dates": 85,
+  "replicates": 5,
+  "floor_search_l1": 0.11578604819452443,
+  "floor_full_l1": 0.2491420891530439,
+  "floor_marginal_l1": 0.22736155450680157,
+  "floor_full_jaccard": 0.8183115291571175,
+  "floor_search_jaccard": 0.9091811391223157,
+  "between_l1": 0.8436569704964544,
+  "between_jaccard": 0.4821688380247204,
+  "ratio_search": 7.286343939116763,
+  "ratio_full": 3.3862482785002648,
+  "ratio_full_ci95": [
+    3.187019133274844,
+    3.5963486329786183
+  ],
+  "ratio_search_ci95": [
+    6.656124669510525,
+    7.583747673252686
+  ],
+  "share_dates_between_above_full": 1.0,
+  "min_generator_ratio_full": 2.211318468728077,
+  "max_generator_ratio_full": 7.794883367833778
+}
