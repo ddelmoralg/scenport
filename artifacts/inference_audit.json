@@ -1,0 +1,23 @@
+{
+  "bonferroni_t": 2.638257273476751,
+  "block_permutations": 9999,
+  "possible_relabelings": 39916800,
+  "passing_all_adjusted": [],
+  "coverage": {
+    "beta": -0.06536841023515205,
+    "t_stat": -2.3174731453399686,
+    "p_clustered": 0.020477971876761147,
+    "p_permutation": 0.0001999600079984003,
+    "min_abs_t_drop_one": 2.09335070746752,
+    "date_min_t": "2021-04-01",
+    "p_block": 0.002,
+    "p_clustered_holm": 0.10238985938380574,
+    "p_permutation_holm": 0.0011997600479904018,
+    "p_block_holm": 0.006,
+    "drop_one_196": 1.0,
+    "drop_one_bonferroni": 0.0,
+    "passes_all_adjusted": 0.0
+  },
+  "april_2021_rank_by_generator_dispersion": 1,
+  "n_dates": 85
+}
