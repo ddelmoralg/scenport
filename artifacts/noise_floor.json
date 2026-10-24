@@ -2,41 +2,40 @@
   "allocator": "ga",
   "generators": [
     "arima",
+    "deepar",
     "ets",
     "garch",
     "lgbm",
+    "lstm",
     "prophet",
     "prophet_rmse",
     "rw",
-    "rw_nodrift"
-  ],
-  "excluded": [
-    "deepar",
-    "lstm",
+    "rw_nodrift",
     "transformer"
   ],
+  "excluded": [],
   "between_all_generators_l1": 0.7837207569812089,
-  "n_generators": 8,
+  "n_generators": 11,
   "n_dates": 85,
   "replicates": 5,
-  "floor_search_l1": 0.11578604819452443,
-  "floor_full_l1": 0.2491420891530439,
-  "floor_marginal_l1": 0.22736155450680157,
-  "floor_full_jaccard": 0.8183115291571175,
-  "floor_search_jaccard": 0.9091811391223157,
-  "between_l1": 0.8436569704964544,
-  "between_jaccard": 0.4821688380247204,
-  "ratio_search": 7.286343939116763,
-  "ratio_full": 3.3862482785002648,
+  "floor_search_l1": 0.1189571049082816,
+  "floor_full_l1": 0.27858392560437206,
+  "floor_marginal_l1": 0.2570504003305436,
+  "floor_full_jaccard": 0.8004265844078677,
+  "floor_search_jaccard": 0.9081512605042018,
+  "between_l1": 0.7837207569812089,
+  "between_jaccard": 0.5144430062154126,
+  "ratio_search": 6.588263539075483,
+  "ratio_full": 2.8132303587903396,
   "ratio_full_ci95": [
-    3.187019133274844,
-    3.5963486329786183
+    2.6760236413109406,
+    2.952284609318311
   ],
   "ratio_search_ci95": [
-    6.656124669510525,
-    7.583747673252686
+    6.208318388997019,
+    7.0226768347448765
   ],
   "share_dates_between_above_full": 1.0,
-  "min_generator_ratio_full": 2.211318468728077,
-  "max_generator_ratio_full": 7.794883367833778
+  "min_generator_ratio_full": 1.8076170487550762,
+  "max_generator_ratio_full": 8.088318484324908
 }
