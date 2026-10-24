@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "lstm",
   "rebalance_date": "2019-08-01",
-  "best_known": -0.01828583775267545,
-  "proven": true
+  "best_known": 0.02773342979058245,
+  "best_weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.145463169204,
+    0.0,
+    0.2,
+    0.0,
+    0.109869748995,
+    0.149305441493,
+    0.084733603443,
+    0.085043552768,
+    0.133997701311,
+    0.091586782787,
+    0.0,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.166
 }

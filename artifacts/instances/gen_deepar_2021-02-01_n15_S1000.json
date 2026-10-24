@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "deepar",
   "rebalance_date": "2021-02-01",
-  "best_known": 0.06579327587931254,
-  "proven": true
+  "best_known": 0.06294472374313645,
+  "best_weights": [
+    0.158585005501,
+    0.199372550709,
+    0.0,
+    0.136582418578,
+    0.129512179234,
+    0.119706918079,
+    0.088556314343,
+    0.076129189248,
+    0.091555424309,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 1.221
 }

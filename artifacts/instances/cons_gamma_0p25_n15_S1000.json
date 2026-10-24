@@ -30,6 +30,27 @@
   "generator": "rw",
   "rebalance_date": "2019-08-01",
   "varied": "gamma",
-  "best_known": null,
-  "proven": false
+  "best_known": 0.13614668532284221,
+  "best_weights": [
+    0.144220006058,
+    0.0,
+    0.147812642448,
+    0.0,
+    0.060519290375,
+    0.2,
+    0.0,
+    0.125822784556,
+    0.03679491211,
+    0.0,
+    0.2,
+    0.084830364453,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.527
 }

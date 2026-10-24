@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "arima",
   "rebalance_date": "2021-02-01",
-  "best_known": 0.06579327587931254,
-  "proven": true
+  "best_known": 0.04076477049441301,
+  "best_weights": [
+    0.2,
+    0.151507227324,
+    0.0,
+    0.122703080992,
+    0.0,
+    0.165909093468,
+    0.0,
+    0.0,
+    0.0,
+    0.070966644627,
+    0.0,
+    0.088283261129,
+    0.0,
+    0.078163448498,
+    0.122467243961
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 1.14
 }

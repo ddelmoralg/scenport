@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "garch",
   "rebalance_date": "2020-08-01",
-  "best_known": 0.0043121816919894935,
-  "proven": true
+  "best_known": -0.007304404322499956,
+  "best_weights": [
+    0.176729205268,
+    0.090797329112,
+    0.0,
+    0.069063278141,
+    0.0,
+    0.0,
+    0.09945983314,
+    0.2,
+    0.101673898117,
+    0.0,
+    0.0,
+    0.0,
+    0.159058962354,
+    0.103217493869,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 1.769
 }

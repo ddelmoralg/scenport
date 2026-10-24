@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "prophet_rmse",
   "rebalance_date": "2019-08-01",
-  "best_known": -0.01828583775267545,
-  "proven": true
+  "best_known": 0.7832296238089165,
+  "best_weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.040952894074,
+    0.2,
+    0.2,
+    0.110361615995,
+    0.0,
+    0.0,
+    0.2,
+    0.2,
+    0.0,
+    0.0,
+    0.048685489931,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.052
 }

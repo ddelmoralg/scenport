@@ -30,6 +30,27 @@
   "generator": "rw",
   "rebalance_date": "2019-08-01",
   "varied": "cvar_alpha",
-  "best_known": null,
-  "proven": false
+  "best_known": 0.010662475307196053,
+  "best_weights": [
+    0.2,
+    0.106519272163,
+    0.0,
+    0.0,
+    0.0,
+    0.2,
+    0.0,
+    0.085296332761,
+    0.148755724703,
+    0.0,
+    0.123999295013,
+    0.093653066615,
+    0.0,
+    0.041776308744,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.896
 }

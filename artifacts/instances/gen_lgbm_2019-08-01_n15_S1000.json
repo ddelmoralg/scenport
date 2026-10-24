@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "lgbm",
   "rebalance_date": "2019-08-01",
-  "best_known": -0.01828583775267545,
-  "proven": true
+  "best_known": 0.10469281014623746,
+  "best_weights": [
+    0.0,
+    0.109118719817,
+    0.0,
+    0.102869919562,
+    0.073127053163,
+    0.0,
+    0.0,
+    0.0,
+    0.031980489885,
+    0.0,
+    0.2,
+    0.0,
+    0.1024406159,
+    0.2,
+    0.180463201672
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.357
 }

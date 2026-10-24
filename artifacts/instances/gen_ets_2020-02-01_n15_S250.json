@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "ets",
   "rebalance_date": "2020-02-01",
-  "best_known": -0.0155448943089502,
-  "proven": true
+  "best_known": -0.023539057656004836,
+  "best_weights": [
+    0.0,
+    0.2,
+    0.144038057992,
+    0.089995836595,
+    0.0,
+    0.096483825836,
+    0.0,
+    0.164944472766,
+    0.0,
+    0.103699139167,
+    0.0,
+    0.10263463205,
+    0.0,
+    0.0,
+    0.098204035594
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 0.45
 }

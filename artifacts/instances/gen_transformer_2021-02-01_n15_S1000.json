@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "transformer",
   "rebalance_date": "2021-02-01",
-  "best_known": 0.06579327587931254,
-  "proven": true
+  "best_known": 0.05208484766281009,
+  "best_weights": [
+    0.15206752376,
+    0.0,
+    0.0,
+    0.077349668962,
+    0.0,
+    0.156321386837,
+    0.10625767788,
+    0.0,
+    0.161668776578,
+    0.094199869423,
+    0.0,
+    0.0,
+    0.0,
+    0.104656469916,
+    0.147478626644
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 3.591
 }

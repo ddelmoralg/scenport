@@ -29,6 +29,27 @@
   "family": "generators",
   "generator": "rw_nodrift",
   "rebalance_date": "2019-08-01",
-  "best_known": -0.01828583775267545,
-  "proven": true
+  "best_known": -0.039953881913134946,
+  "best_weights": [
+    0.0,
+    0.134212241341,
+    0.142425318601,
+    0.0,
+    0.0,
+    0.075779179178,
+    0.148318512697,
+    0.085757327652,
+    0.0,
+    0.0,
+    0.146042352692,
+    0.13174564184,
+    0.135719426,
+    0.0,
+    0.0
+  ],
+  "proven": true,
+  "status": "optimal",
+  "solver": "HiGHS via CVXPY 1.9.2",
+  "mip_rel_gap": 1e-06,
+  "solve_seconds": 11.188
 }
