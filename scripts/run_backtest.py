@@ -63,6 +63,8 @@ def main() -> int:
     parser.add_argument("--allocator", nargs="+", default=["all"])
     parser.add_argument("--seeds", type=int, default=None,
                         help="number of seeds for stochastic allocators (default: ea.n_seeds)")
+    parser.add_argument("--first-seed", type=int, default=0,
+                        help="seeds run from here; the noise floor replicates use 1 to 4")
     parser.add_argument("--tag", default="", help="suffix for the output directory")
     args = parser.parse_args()
 
@@ -106,7 +108,8 @@ def main() -> int:
     for name in names:
         allocator_rows = []
         allocator = build_allocator(name, cfg)
-        seeds = range(n_seeds) if allocator.stochastic else [0]
+        seeds = (range(args.first_seed, args.first_seed + n_seeds)
+                 if allocator.stochastic else [args.first_seed])
         for seed in seeds:
             label = f"{args.forecaster}+{name}" + (f"+s{seed}" if allocator.stochastic else "")
             log.info("running %s", label)

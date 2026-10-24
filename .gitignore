@@ -28,3 +28,6 @@ logs/
 
 .DS_Store
 Thumbs.db
+
+# Replicates for the noise floor (slurm/33 to 35). Same layout as runs/.
+runs/noise_floor/
