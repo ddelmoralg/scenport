@@ -27,8 +27,13 @@ DIAGNOSTICS = ("mase", "crps", "pinball", "coverage_error", "energy_score", "var
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--set", dest="overrides", action="append", default=[])
+    args = parser.parse_args()
     root = cfgmod.repo_root()
-    cfg = cfgmod.load("configs/base.yaml", [])
+    cfg = cfgmod.load("configs/base.yaml", args.overrides)
     runs = cfg.resolve("paths.runs", root)
     panel_dir = cfg.resolve("paths.panel", root)
 

@@ -338,7 +338,7 @@ def market_period_returns(panel_dir: Path, dates) -> pd.Series:
 def build(args) -> None:
     from aggregate import build_transmission_panel, load_scores
 
-    cfg = cfgmod.load(args.config)
+    cfg = cfgmod.load(args.config, args.overrides)
     runs = cfg.resolve("paths.runs", ROOT)
     panel_dir = cfg.resolve("paths.panel", ROOT)
     per_asset, joint = load_scores(runs, panel_dir, int(cfg["backtest.train_days"]))
@@ -361,6 +361,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--config", default="configs/base.yaml")
+    parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--block-reps", type=int, default=9999)
     parser.add_argument("--drop-reps", type=int, default=2000)
     parser.add_argument("--boot", type=int, default=2000)

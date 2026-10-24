@@ -987,6 +987,13 @@ def table_exact(runs: Path) -> pd.DataFrame:
     frame = pd.read_parquet(path)
     kind = frame["kind"] if "kind" in frame else pd.Series("candidate", index=frame.index)
 
+    # Distance in objective units as well. The relative gap divides by |f*|, and
+    # one date in the study has an optimum of 0.0004, which then decides every
+    # mean and every worst case; the absolute distance has no such denominator.
+    optimum = frame[frame["allocator"] == "milp"].set_index("rebalance")["objective"]
+    frame["absolute_gap"] = (frame["objective"]
+                             - optimum.reindex(frame["rebalance"]).to_numpy()).abs()
+
     table = (
         frame.assign(kind=kind)
         .groupby(["kind", "allocator"])
@@ -994,6 +1001,9 @@ def table_exact(runs: Path) -> pd.DataFrame:
             mean_gap=("relative_gap", "mean"),
             median_gap=("relative_gap", "median"),
             worst_gap=("relative_gap", "max"),
+            mean_absolute_gap=("absolute_gap", "mean"),
+            median_absolute_gap=("absolute_gap", "median"),
+            worst_absolute_gap=("absolute_gap", "max"),
             mean_seconds=("seconds", "mean"),
             n=("relative_gap", "size"),
         )
