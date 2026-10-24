@@ -1,7 +1,7 @@
 """The figures that carry the paper's three claims, one figure per claim.
 
-- `displacement`: swapping the generator moves the decision much further than
-  reseeding it.
+- `displacement`: swapping the generator moves the decision further than
+  rerunning the whole pipeline of one generator with new seeds.
 - `gaps`: the metaheuristics land close to a proven optimum, and the discrete
   constraints are worth solving.
 - `transmission`: which diagnostics are associated with same-month return, under
@@ -28,50 +28,50 @@ def _jitter(n: int, seed: int, spread: float = 0.13) -> np.ndarray:
 
 
 def fig_displacement(artifacts: Path):
-    """How far the chosen portfolio moves: reseeding against swapping.
+    """How far the chosen portfolio moves: rerunning one generator against swapping.
 
-    Both rows are mean L1 distance between pairs of weight vectors, same dates
-    and same allocator. The top row holds one point per generator, pairing its
-    own seeds against each other. The bottom holds one point per pair of
-    generators. The gap between the two is the whole sensitivity argument, so
-    the figure is just the two clouds and the distance between their means.
+    Every row is a mean L1 distance between pairs of weight vectors, same dates and
+    same allocator. The top row reruns only the coupling and the search on the
+    same simulated paths; the middle row reruns the whole pipeline, generator
+    included, which is the floor the paper uses; the bottom row holds one point
+    per pair of generators. The ratio drawn is bottom over middle.
     """
     import matplotlib.pyplot as plt
 
-    within = pd.read_csv(artifacts / "displacement_within.csv")
+    floors = pd.read_csv(artifacts / "noise_floor.csv")
     between = pd.read_csv(artifacts / "displacement_between.csv")
 
-    floor = float(within["l1_mean"].mean())
+    floor = float(floors["floor_full_l1"].mean())
     moved = float(between["l1_mean"].mean())
 
-    fig, ax = plt.subplots(figsize=(style.TWO_COL, 2.5))
+    fig, ax = plt.subplots(figsize=(style.TWO_COL, 2.8))
 
     rows = [
-        (1.0, within["l1_mean"].to_numpy(), style.REFERENCE, 11,
-         "Same generator,\ndifferent seed"),
+        (2.0, floors["floor_search_l1"].to_numpy(), style.MUTED, 10,
+         "Same generator,\nnew search and coupling"),
+        (1.0, floors["floor_full_l1"].to_numpy(), style.REFERENCE, 11,
+         "Same generator,\nwhole pipeline rerun"),
         (0.0, between["l1_mean"].to_numpy(), style.PALETTE[0], 12,
          "Different\ngenerator"),
     ]
     for y, values, colour, seed, _ in rows:
         ax.scatter(values, y + _jitter(len(values), seed), s=26, color=colour,
                    alpha=0.75, edgecolor="white", linewidth=0.5, zorder=3)
-
-    for y, values, colour, _, _ in rows:
-        mean = float(values.mean())
-        ax.vlines(mean, y - 0.28, y + 0.28, color=colour, linewidth=1.8, zorder=4)
+        ax.vlines(float(values.mean()), y - 0.28, y + 0.28, color=colour,
+                  linewidth=1.8, zorder=4)
 
     # The ratio is the headline number, so draw it rather than leave it to the
-    # caption. The arrow sits between the two means at mid height.
+    # caption. The arrow runs from the floor the paper uses to the swap.
     ax.annotate(
         "", xy=(moved, 0.5), xytext=(floor, 0.5),
         arrowprops={"arrowstyle": "<->", "color": style.INK, "linewidth": 0.9},
     )
-    ax.text(np.sqrt(floor * moved), 0.58, f"{moved / floor:.1f}x", ha="center",
+    ax.text((floor + moved) / 2, 0.58, f"{moved / floor:.1f}x", ha="center",
             fontsize=9, color=style.INK)
 
-    ax.set_yticks([1.0, 0.0])
+    ax.set_yticks([r[0] for r in rows])
     ax.set_yticklabels([r[4] for r in rows], fontsize=8)
-    ax.set_ylim(-0.5, 1.5)
+    ax.set_ylim(-0.5, 2.5)
     ax.set_xlim(0.0, None)
     ax.set_xlabel("Mean L1 distance between portfolios")
     ax.grid(axis="y", visible=False)

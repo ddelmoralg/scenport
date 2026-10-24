@@ -161,11 +161,12 @@ differ.
 | `32_backtest_ea` | `medium` | 11 forecasters x 4 metaheuristics, 5 seeds | 2-3 h |
 | `31_ablations` | `medium` | 18 sensitivity runs | 2-6 h |
 | `40_exact` | `long` | gaps + scaling sweep, 24 cores | a few hours |
+| `33`, `34`, `35` | `short` | noise floor: generator replicates, their backtests, the floor | 1-3 h |
 | `50_aggregate` | `medium` | one task | under 1 h |
 
 Everything fits in a day. `40_exact` sits on the long queue for headroom: each
-exact solve is allowed fifteen minutes, although on the thinned instances in the
-paper none needed more than a few seconds.
+exact solve is allowed fifteen minutes, although none in the paper needed more
+than a few seconds.
 
 The two forecasting jobs run at the same time and share one node, so their
 concurrency limits are set together: 20 x 8 cores plus 3 x 8 leaves headroom on a
@@ -221,11 +222,12 @@ coefficient-of-variation test as a backstop for pegs the list misses.
 ## Instance library
 
 `scripts/export_instances.py` dumps the allocation problems as an npz plus a JSON
-header: scenario matrix, previous weights, constraint parameters, and the best
-objective we know of with a flag for whether a solver proved it. The released set
-in `artifacts/instances/` has 105 instances, 88 of them with a proven optimum; the
-other 17 vary a constraint or a universe size that the exact run did not cover and
-carry no bound.
+header: scenario matrix, previous weights and constraint parameters.
+`scripts/solve_instances.py` then solves each one as released, with every scenario
+and a relative tolerance of 1e-6, and writes the optimum and the weights that attain
+it into the header. All 105 instances in `artifacts/instances/` are proven optimal;
+the thousand-scenario ones took a median of 0.8 seconds. A result can be checked by
+evaluating the stored weights, which is what `tests/test_instances.py` does.
 
 Reading an instance needs numpy and nothing from this package, so anyone
 benchmarking a different solver does not have to run a Prophet sweep first.

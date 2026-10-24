@@ -15,11 +15,19 @@ to find. The panels are built to match the real one where it matters, and the tw
 properties that turn out to matter are how skewed the diagnostic is and how
 strongly it correlates with market exposure. Measured on the real panel:
 
-    diagnostic        skew    rho with exposure
-    mase              8.17    0.08
-    pinball           3.50    0.34
+    diagnostic        skew    rho with exposure (within date)
+    mase              2.95    0.44
     crps              3.17    0.36
-    coverage_error    0.90    0.44
+    pinball           3.50    0.34
+    coverage_error    0.73    0.28
+    energy_score      3.32    0.34
+    variogram_score   3.60    0.29
+
+Earlier versions measured a MASE scaled by price changes in dollars (skew 8.17)
+and a per-asset coverage error that was really a miss rate (skew 0.90). Both were
+corrected in aggregate.py and the values above are the corrected ones. The return
+noise and the spread of the market return are also set to what the panel shows,
+0.08 within a date and 0.19 across dates, instead of 0.02 and 0.06.
 
 Loss metrics are skewed by construction, which is the whole point: this is not an
 accident of one dataset.
@@ -48,11 +56,17 @@ ALPHA = 0.05
 
 #: Skew and confound as measured on the real panel, so the grid brackets it.
 REAL = {
-    "mase": (8.17, 0.08),
-    "pinball": (3.50, 0.34),
+    "mase": (2.95, 0.44),
     "crps": (3.17, 0.36),
-    "coverage_error": (0.90, 0.44),
+    "pinball": (3.50, 0.34),
+    "coverage_error": (0.73, 0.28),
+    "energy_score": (3.32, 0.34),
+    "variogram_score": (3.60, 0.29),
 }
+#: Within-date standard deviation of the realised return and cross-date standard
+#: deviation of the market return over the holding period, from the panel.
+NOISE_SD = 0.08
+MARKET_SD = 0.19
 
 
 def sigma_for_skew(target: float) -> float:
@@ -91,7 +105,7 @@ def synthetic_panel(beta: float, rng: np.random.Generator, log_sigma: float, rho
     date = np.repeat(np.arange(N_DATES), N_GENERATORS)
     generator = np.tile(np.arange(N_GENERATORS), N_DATES)
 
-    market = np.repeat(rng.normal(0.02, 0.06, N_DATES), N_GENERATORS)
+    market = np.repeat(rng.normal(0.02, MARKET_SD, N_DATES), N_GENERATORS)
     shared = rng.normal(0.0, 1.0, N_GENERATORS)[generator]
     independent = np.sqrt(max(1.0 - rho * rho, 0.0))
 
@@ -99,7 +113,7 @@ def synthetic_panel(beta: float, rng: np.random.Generator, log_sigma: float, rho
     score = np.exp(log_sigma * raw) if log_sigma > 0 else raw
     exposure = 1.0 + 0.2 * (rho * shared + independent * rng.normal(0.0, 1.0, date.size))
 
-    ret = exposure * market + beta * score + rng.normal(0.0, 0.02, date.size)
+    ret = exposure * market + beta * score + rng.normal(0.0, NOISE_SD, date.size)
 
     frame = pd.DataFrame({"date": date, "score": score, "exposure": exposure, "ret": ret})
     demeaned = T.within_transform(frame, ["score", "exposure", "ret"], "date")
@@ -110,6 +124,21 @@ def synthetic_panel(beta: float, rng: np.random.Generator, log_sigma: float, rho
     )
 
 
+def fast_permutation_p(y, X, clusters, reps: int, seed: int) -> float:
+    """T.permutation_within_clusters with one lexsort per draw, same null."""
+    observed = abs(np.linalg.lstsq(X, y, rcond=None)[0][0])
+    codes = pd.factorize(clusters)[0]
+    sorted_idx = np.argsort(codes, kind="stable")
+    rng = np.random.default_rng(seed)
+    shuffled = X.copy()
+    extreme = 0
+    for _ in range(reps):
+        order = np.lexsort((rng.random(len(codes)), codes))
+        shuffled[sorted_idx, 0] = X[order, 0]
+        extreme += abs(np.linalg.lstsq(shuffled, y, rcond=None)[0][0]) >= observed
+    return (extreme + 1) / (reps + 1)
+
+
 def rejection_rates(beta, log_sigma, rho, reps, seed, permutations):
     rng = np.random.default_rng(seed)
     clustered = permutation = 0
@@ -117,10 +146,8 @@ def rejection_rates(beta, log_sigma, rho, reps, seed, permutations):
         y, X, date = synthetic_panel(beta, rng, log_sigma, rho)
         if T.cluster_robust_ols(y, X, date)["p_value"][0] < ALPHA:
             clustered += 1
-        result = T.permutation_within_clusters(
-            y, X, date, column=0, reps=permutations, seed=int(rng.integers(1 << 30))
-        )
-        if result.p_value < ALPHA:
+        if fast_permutation_p(y, X, date, permutations,
+                              int(rng.integers(1 << 30))) < ALPHA:
             permutation += 1
     return clustered / reps, permutation / reps
 
