@@ -30,10 +30,15 @@ source "$SCENPORT_ROOT/slurm/env.sh"
 
 FORECASTERS=(rw rw_nodrift arima ets garch prophet prophet_rmse lgbm lstm deepar transformer)
 N_SEEDS=4
+# SCENPORT_SHARDS splits each replicate's calendar over several tasks, which the
+# neural generators need on CPU: about four minutes a date, so 85 dates do not
+# fit one task. With 4 shards the neural tasks are 128 to 175.
+N_SHARDS="${SCENPORT_SHARDS:-1}"
 
 idx=${SLURM_ARRAY_TASK_ID:-0}
-forecaster=${FORECASTERS[$((idx / N_SEEDS))]}
-seed=$((1 + idx % N_SEEDS))
+forecaster=${FORECASTERS[$((idx / (N_SEEDS * N_SHARDS)))]}
+seed=$((1 + (idx / N_SHARDS) % N_SEEDS))
+shard=$((idx % N_SHARDS))
 
 extra=()
 workers="${SLURM_CPUS_PER_TASK:-8}"
@@ -46,12 +51,14 @@ case "$forecaster" in
         ;;
 esac
 
-echo "task $idx -> forecaster=$forecaster forecast seed=$seed"
+echo "task $idx -> forecaster=$forecaster forecast seed=$seed shard=$shard/$N_SHARDS"
 
 python scripts/run_forecasts.py \
     --config configs/base.yaml \
     --set paths.runs=runs/noise_floor \
     --forecaster "$forecaster" \
     --seed "$seed" \
+    --shard "$shard" \
+    --n-shards "$N_SHARDS" \
     --workers "$workers" \
     "${extra[@]}"
