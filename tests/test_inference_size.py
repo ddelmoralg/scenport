@@ -43,9 +43,23 @@ def test_a_symmetric_diagnostic_is_not_skewed(study):
 
 
 def test_the_grid_brackets_what_was_measured(study):
-    """MASE is the extreme case and the grid has to reach it."""
-    assert max(s for s, _ in study.REAL.values()) == pytest.approx(8.17)
-    assert study.sigma_for_skew(8.17) < 3.0, "the simulated grid tops out at sigma 3"
+    """The grid reaches past the most skewed diagnostic the panel has."""
+    largest = max(s for s, _ in study.REAL.values())
+    assert study.sigma_for_skew(largest) < 3.0, "the simulated grid tops out at sigma 3"
+
+
+def test_the_simulation_uses_the_skews_the_panel_has(study):
+    """The constants in the script must be the ones measured on the corrected panel.
+
+    They were once those of a MASE scaled by dollar price changes and of a per-asset
+    miss rate, which is how a wrong calibration can survive a fix elsewhere.
+    """
+    import pandas as pd
+
+    measured = pd.read_csv(SCRIPTS.parent / "artifacts" / "panel_diagnostics.csv")
+    measured = measured.set_index("diagnostic")["skew"]
+    for name, (skew, _) in study.REAL.items():
+        assert skew == pytest.approx(measured[name], abs=0.01), name
 
 
 def test_the_panel_has_the_shape_of_the_real_one(study):
