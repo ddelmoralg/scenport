@@ -570,11 +570,12 @@ def table_displacement(
     collapsing into "forecast quality in disguise".
 
     Two frames come back. The first is every pair of generators. The second is the
-    same estimator applied to one generator rerun under a different seed, which is
-    the noise floor: before claiming the decision moves because the generator
-    changed, we have to know how far it moves when nothing changes but the random
-    draw. Both use cross-seed pairs, so they are measured the same way and the ratio
-    between them means something.
+    same estimator applied to one generator rerun under a different backtest seed,
+    which redraws the coupling template and the search on the stored marginal paths
+    of forecast seed 0. That is only part of the noise floor: the generator's own
+    sampling is left out, and it is the larger part. scripts/noise_floor.py reruns
+    the generator as well, and its floor is the one the paper quotes. Both use
+    cross-seed pairs, so they are measured the same way.
 
     ``l1`` runs from 0 to 2 for two portfolios on the simplex. ``jaccard`` is the
     overlap of the chosen assets, 1 when both hold exactly the same names.
@@ -811,13 +812,14 @@ def table_sensitivity(
       question becomes which diagnostic predicts it;
     - neither moves: the program is insensitive to its generator inside this class,
       which is a statement about the formulation;
-    - the decision sits at the seed noise floor and performance still varies: the
+    - the decision sits at the noise floor and performance still varies: the
       variation came from the realised path, not from the generator. That is a
       decomposition this literature leaves mixed, and it is the most interesting of
       the three.
 
-    ``displacement_over_noise`` below one means swapping the generator moves the
-    portfolio less than rerunning one generator with a different seed.
+    ``displacement_over_noise`` is taken against the search-and-coupling floor of
+    table_displacement, so it overstates the ratio; the one against the full floor,
+    which reruns the generator too, is in artifacts/noise_floor.json.
     """
     between, within = table_displacement(runs, allocator)
     by_date = displacement_by_date(runs, allocator)
@@ -1099,10 +1101,12 @@ def main() -> int:
             floor = between.attrs.get("noise_floor_l1", float("nan"))
             write(between, artifacts, "displacement_between",
                   "Pairwise decision displacement between scenario generators. "
-                  f"Mean L1 within one generator across seeds: {floor:.4f}.")
+                  f"Mean L1 within one generator across search and coupling seeds: "
+                  f"{floor:.4f}; the full floor is in noise_floor.csv.")
             write(within, artifacts, "displacement_within",
-                  "Decision displacement from rerunning one generator with a new seed. "
-                  "This is the floor every between-generator figure is quoted against.")
+                  "Decision displacement from rerunning the search and the coupling of "
+                  "one generator with a new seed, on the same simulated paths. The full "
+                  "floor, which reruns the generator too, is in noise_floor.csv.")
             by_date = displacement_by_date(runs, args.reference_allocator)
             if not by_date.empty:
                 by_date.to_parquet(artifacts / "displacement_panel.parquet", index=False)
